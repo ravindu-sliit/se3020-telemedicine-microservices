@@ -1,0 +1,9 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "echo \"Add React app setup here\"",
+    "build": "echo \"Add React build step here\""
+  }
+}
