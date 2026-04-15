@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+  labels:
+    app: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: frontend-image:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 80
+          env:
+            - name: REACT_APP_AI_API_URL
+              value: http://smart-healthcare.local/api
+            - name: REACT_APP_PAYMENT_API_URL
+              value: http://smart-healthcare.local/api
+            - name: REACT_APP_NOTIFICATION_API_URL
+              value: http://smart-healthcare.local/api
+            - name: REACT_APP_STRIPE_PUBLISHABLE_KEY
+              value: pk_test_51TMOFmDgKqLX0tFrixZipLrdRMEyI8DWt2sgkty9iHbJRnwo01vG5fegNo3kevuNpmvnZ9tt7XMMEDQkBOHPnEZa006AdfIoFv

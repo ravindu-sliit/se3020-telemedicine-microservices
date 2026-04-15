@@ -117,7 +117,7 @@ const Patient = () => {
               { to: '/patient/book-appointment', icon: CalendarIcon, label: 'Book Appointment', color: '#4f46e5', bg: '#eef2ff' },
               { to: '#', icon: UserIcon, label: 'Find Doctors', color: '#0ea5e9', bg: '#f0f9ff' },
               { to: '#', icon: DocumentTextIcon, label: 'Medical Records', color: '#10b981', bg: '#ecfdf5' },
-              { to: '#', icon: ChatBubbleLeftRightIcon, label: 'AI Symptom Checker', color: '#7c3aed', bg: '#f5f3ff' },
+              { to: '/patient/symptom-checker', icon: ChatBubbleLeftRightIcon, label: 'AI Symptom Checker', color: '#7c3aed', bg: '#f5f3ff' },
             ].map((action, i) => {
               const Icon = action.icon;
               return (
