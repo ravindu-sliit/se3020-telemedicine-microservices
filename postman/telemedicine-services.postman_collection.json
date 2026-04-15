@@ -1,0 +1,171 @@
+{
+  "info": {
+    "name": "Telemedicine Services API",
+    "description": "Postman collection for AI Symptom Checker and Payment Service endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "AI Symptom Checker",
+      "item": [
+        {
+          "name": "Health - AI Symptom Checker",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ai_base_url}}/api/health",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Check Symptoms",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symptoms\": \"fever, cough, sore throat\"\n}"
+            },
+            "url": {
+              "raw": "{{ai_base_url}}/api/ai/check-symptoms",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "check-symptoms"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Check Symptoms - Validation Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{ai_base_url}}/api/ai/check-symptoms",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "check-symptoms"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payment Service",
+      "item": [
+        {
+          "name": "Health - Payment Service",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{payment_base_url}}/api/health",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Checkout Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointmentId\": \"APT-2002\",\n  \"amount\": 1250\n}"
+            },
+            "url": {
+              "raw": "{{payment_base_url}}/api/payments/checkout",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "checkout"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Checkout Session - Invalid Amount",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointmentId\": \"APT-2002\",\n  \"amount\": -1\n}"
+            },
+            "url": {
+              "raw": "{{payment_base_url}}/api/payments/checkout",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "checkout"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "ai_base_url",
+      "value": "http://localhost:5005"
+    },
+    {
+      "key": "payment_base_url",
+      "value": "http://localhost:5006"
+    }
+  ]
+}
