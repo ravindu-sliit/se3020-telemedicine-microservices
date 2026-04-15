@@ -2,10 +2,9 @@ const mongoose = require('mongoose');
 
 const doctorSchema = new mongoose.Schema({
     userId: { 
-        type: String, 
+        type: mongoose.Schema.Types.ObjectId, 
         required: true, 
         unique: true 
-        // This will link to the global auth ID Binoth creates
     },
     name: { 
         type: String, 
@@ -14,6 +13,10 @@ const doctorSchema = new mongoose.Schema({
     specialty: { 
         type: String, 
         required: true 
+    },
+    isActive: { 
+        type: Boolean, 
+        default: true 
     },
     availability: [{
         date: { type: Date },
