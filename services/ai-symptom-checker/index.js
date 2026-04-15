@@ -106,7 +106,17 @@ app.post('/api/ai/check-symptoms', async (req, res) => {
 
     return res.json(aiData);
   } catch (error) {
-    if (String(error?.message || '').includes('API key not valid')) {
+    const errorMessage = String(error?.message || '');
+    const providerStatus = Number(error?.status || error?.response?.status || 0);
+
+    if (errorMessage.includes('API key not valid')) {
+      return res.status(200).json({
+        ...buildFallbackRecommendation(req.body?.symptoms),
+        mode: 'fallback'
+      });
+    }
+
+    if (providerStatus === 403 || providerStatus === 429 || providerStatus === 503) {
       return res.status(200).json({
         ...buildFallbackRecommendation(req.body?.symptoms),
         mode: 'fallback'

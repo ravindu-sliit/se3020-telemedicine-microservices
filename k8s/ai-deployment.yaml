@@ -22,6 +22,6 @@ spec:
             - containerPort: 5005
           env:
             - name: GEMINI_API_KEY
-              value: "AIzaSyCfxlPBomBVKDB7au5zU1Jby8_QC5SBhgI"
+              value: "AIzaSyDn0XzdNCuFwP5j2UoQ1QxjQI65uGAipSE"
             - name: GEMINI_MODEL
               value: "gemini-2.5-flash"

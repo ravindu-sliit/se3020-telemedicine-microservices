@@ -22,6 +22,6 @@ spec:
             - containerPort: 5007
           env:
             - name: EMAIL_USER
-              value: "your_email@gmail.com"
+              value: "webstorebs@gmail.com"
             - name: EMAIL_APP_PASSWORD
-              value: "your_email_app_password"
+              value: "xoyx xfiu xetd ofzs"
