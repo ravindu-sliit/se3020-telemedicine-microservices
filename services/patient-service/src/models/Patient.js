@@ -2,23 +2,65 @@ const mongoose = require('mongoose');
 
 const patientSchema = new mongoose.Schema(
   {
-    userId: {
+    firstName: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    lastName: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    email: {
       type: String,
       required: true,
       unique: true,
-      trim: true
+      trim: true,
+      lowercase: true
     },
-    fullName: {
+    passwordHash: {
       type: String,
-      required: true,
-      trim: true
+      required: true
     },
     dateOfBirth: {
       type: Date
     },
     gender: {
       type: String,
-      enum: ['male', 'female', 'other']
+      enum: ['Male', 'Female', 'Other']
+    },
+    contactNumber: {
+      type: String,
+      trim: true
+    },
+    medicalReports: [
+      {
+        reportName: {
+          type: String,
+          trim: true
+        },
+        fileUrl: {
+          type: String,
+          trim: true
+        },
+        uploadedAt: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    ],
+    allergies: {
+      type: [String],
+      default: []
+    },
+    userId: {
+      type: String,
+      trim: true
+    },
+    fullName: {
+      type: String,
+      trim: true
     },
     phone: {
       type: String,
