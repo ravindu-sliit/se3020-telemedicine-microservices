@@ -6,6 +6,8 @@ import './theme.css';
 import Landing from './pages/Landing';
 import Home from './pages/Home';
 import Patient from './pages/Patient';
+import PatientProfile from './pages/PatientProfile';
+import Auth from './pages/Auth';
 import Doctor from './pages/Doctor';
 import Admin from './pages/Admin';
 import BookAppointment from './pages/BookAppointment';
@@ -26,12 +28,15 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Auth />} />
+          <Route path="/register" element={<Auth />} />
           
           {/* Direct Routes - No authentication required */}
           <Route path="/home" element={<Home />} />
           
           {/* Patient Routes */}
           <Route path="/patient" element={<Patient />} />
+          <Route path="/patient/profile" element={<PatientProfile />} />
           <Route path="/patient/symptom-checker" element={<SymptomChecker />} />
           <Route path="/patient/book-appointment" element={<BookAppointment />} />
           

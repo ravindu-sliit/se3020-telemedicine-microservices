@@ -1,10 +1,274 @@
 {
   "info": {
     "name": "Telemedicine Services API",
-    "description": "Postman collection for AI Symptom Checker, Payment Service, and Notification Service endpoints.",
+    "description": "Postman collection for Auth, Patient, AI Symptom Checker, Payment Service, and Notification Service endpoints.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Health - Auth Service",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{auth_base_url}}/api/health",
+              "host": [
+                "{{auth_base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Register Patient",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('auth_test_email', `atlas.patient+${Date.now()}@example.com`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Register succeeds', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('auth_token', json?.data?.token || '');",
+                  "pm.collectionVariables.set('auth_user_id', json?.data?.user?.id || '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Atlas Test Patient\",\n  \"email\": \"{{auth_test_email}}\",\n  \"password\": \"Passw0rd!\",\n  \"role\": \"patient\"\n}"
+            },
+            "url": {
+              "raw": "{{auth_base_url}}/api/auth/register",
+              "host": [
+                "{{auth_base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Login Patient",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login succeeds', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('auth_token', json?.data?.token || pm.collectionVariables.get('auth_token') || '');",
+                  "pm.collectionVariables.set('auth_user_id', json?.data?.user?.id || pm.collectionVariables.get('auth_user_id') || '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{auth_test_email}}\",\n  \"password\": \"Passw0rd!\"\n}"
+            },
+            "url": {
+              "raw": "{{auth_base_url}}/api/auth/login",
+              "host": [
+                "{{auth_base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{auth_base_url}}/api/auth/me",
+              "host": [
+                "{{auth_base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Patient Management",
+      "item": [
+        {
+          "name": "Health - Patient Service",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{patient_base_url}}/api/health",
+              "host": [
+                "{{patient_base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Patient Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Create profile succeeds', function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('patient_profile_user_id', json?.data?.userId || pm.collectionVariables.get('auth_user_id') || '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{auth_user_id}}\",\n  \"phone\": \"1234567890\",\n  \"gender\": \"other\"\n}"
+            },
+            "url": {
+              "raw": "{{patient_base_url}}/api/patients/profile",
+              "host": [
+                "{{patient_base_url}}"
+              ],
+              "path": [
+                "api",
+                "patients",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Patient Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{patient_base_url}}/api/patients/profile/{{auth_user_id}}",
+              "host": [
+                "{{patient_base_url}}"
+              ],
+              "path": [
+                "api",
+                "patients",
+                "profile",
+                "{{auth_user_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Patient Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"0987654321\",\n  \"gender\": \"other\"\n}"
+            },
+            "url": {
+              "raw": "{{patient_base_url}}/api/patients/profile/{{auth_user_id}}",
+              "host": [
+                "{{patient_base_url}}"
+              ],
+              "path": [
+                "api",
+                "patients",
+                "profile",
+                "{{auth_user_id}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
     {
       "name": "AI Symptom Checker",
       "item": [
@@ -208,6 +472,30 @@
     }
   ],
   "variable": [
+    {
+      "key": "auth_base_url",
+      "value": "http://localhost:5001"
+    },
+    {
+      "key": "patient_base_url",
+      "value": "http://localhost:5002"
+    },
+    {
+      "key": "auth_test_email",
+      "value": ""
+    },
+    {
+      "key": "auth_token",
+      "value": ""
+    },
+    {
+      "key": "auth_user_id",
+      "value": ""
+    },
+    {
+      "key": "patient_profile_user_id",
+      "value": ""
+    },
     {
       "key": "ai_base_url",
       "value": "http://localhost:5005"
