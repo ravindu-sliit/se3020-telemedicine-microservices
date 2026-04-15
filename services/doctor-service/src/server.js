@@ -1,4 +1,7 @@
 const dotenv = require('dotenv');
+const dns = require('dns');
+
+dns.setServers(["1.1.1.1","8.8.8.8"]);
 
 dotenv.config();
 
