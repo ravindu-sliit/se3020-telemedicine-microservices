@@ -16,6 +16,7 @@ The platform has a React frontend and independent Node.js microservices.
 
 - auth-service (`services/auth-service`): registration, login, current user, JWT
 - patient-service (`services/patient-service`): profile create/read/update, report APIs
+- doctor-service (`services/doctor-service`): doctor application submission and review
 - ai-symptom-checker (`services/ai-symptom-checker`): symptom triage endpoint
 - payment-service (`services/payment-service`): checkout session creation
 - notification-service (`services/notification-service`): email notification endpoint
@@ -48,6 +49,7 @@ Kubernetes frontend deployment sets these to `http://smart-healthcare.local/api`
 
 - auth: `/api/auth/*`
 - patient: `/api/patients/*`
+- doctor: `/api/doctors/*`
 - ai: `/api/ai/*`
 - payments: `/api/payments/*`
 - notifications: `/api/notifications/*`
@@ -77,6 +79,7 @@ docker build -t frontend-image:latest .\frontend
 docker build -t ai-symptom-checker-image:latest .\services\ai-symptom-checker
 docker build -t auth-service-image:latest .\services\auth-service
 docker build -t patient-service-image:latest .\services\patient-service
+docker build -t doctor-service-image:latest .\services\doctor-service
 docker build -t payment-service-image:latest .\services\payment-service
 docker build -t notification-service-image:latest .\services\notification-service
 ```
@@ -88,6 +91,7 @@ Create files from templates:
 ```powershell
 Copy-Item .\k8s\auth-secret.example.yaml .\k8s\auth-secret.yaml
 Copy-Item .\k8s\patient-secret.example.yaml .\k8s\patient-secret.yaml
+Copy-Item .\k8s\doctor-secret.example.yaml .\k8s\doctor-secret.yaml
 Copy-Item .\k8s\payment-secret.example.yaml .\k8s\payment-secret.yaml
 ```
 
@@ -96,6 +100,7 @@ Fill real values, then apply:
 ```powershell
 kubectl apply -f .\k8s\auth-secret.yaml
 kubectl apply -f .\k8s\patient-secret.yaml
+kubectl apply -f .\k8s\doctor-secret.yaml
 kubectl apply -f .\k8s\payment-secret.yaml
 ```
 
@@ -107,6 +112,8 @@ Get-ChildItem .\k8s\*.yaml |
   ForEach-Object { kubectl apply -f $_.FullName }
 ```
 
+If you also use the doctor secret template, exclude it the same way when applying all manifests.
+
 ### 3.5 Access through ingress
 
 - Ingress host: `smart-healthcare.local`
@@ -117,6 +124,7 @@ Current ingress paths in `k8s/ingress.yaml`:
 
 - `/` -> frontend-service
 - `/api/auth` -> auth-service
+- `/api/doctors` -> doctor-service
 - `/api/patients` -> patient-service
 - `/api/ai` -> ai-symptom-checker-service
 - `/api/payments` -> payment-service
@@ -159,9 +167,13 @@ Artifacts:
 - `k8s/ingress.yaml`
 - `k8s/auth-deployment.yaml`
 - `k8s/auth-service.yaml`
+- `k8s/doctor-deployment.yaml`
+- `k8s/doctor-service.yaml`
 - `k8s/patient-deployment.yaml`
 - `k8s/patient-service.yaml`
 - `k8s/auth-secret.example.yaml`
+- `k8s/doctor-secret.example.yaml`
+- `k8s/doctor-secret.yaml`
 - `k8s/patient-secret.example.yaml`
 - `k8s/payment-secret.example.yaml`
 
@@ -206,3 +218,8 @@ Optional temporary workaround:
 ```powershell
 kubectl scale deployment patient-service --replicas=0
 ```
+
+### Doctor service
+
+- Doctor service listens on port `5002`.
+- Doctor service reads `MONGO_URI` and shares the auth JWT secret through `auth-service-secrets`.

@@ -15,6 +15,13 @@ spec:
                 name: auth-service
                 port:
                   number: 5001
+          - path: /api/doctors
+            pathType: Prefix
+            backend:
+              service:
+                name: doctor-service
+                port:
+                  number: 5002
           - path: /api/patients
             pathType: Prefix
             backend:
