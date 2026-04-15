@@ -1,31 +1,36 @@
 const mongoose = require('mongoose');
 
+const availabilitySchema = new mongoose.Schema(
+  {
+    dayOfWeek: {
+      type: String,
+      enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    },
+    startTime: {
+      type: String,
+      trim: true
+    },
+    endTime: {
+      type: String,
+      trim: true
+    }
+  },
+  {
+    _id: false
+  }
+);
+
 const doctorSchema = new mongoose.Schema(
   {
-    firstName: {
+    userId: {
       type: String,
-      required: true,
-      trim: true
-    },
-    lastName: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    email: {
-      type: String,
-      required: true,
+      required: [true, 'User ID is required'],
       unique: true,
-      trim: true,
-      lowercase: true
-    },
-    passwordHash: {
-      type: String,
-      required: true
+      trim: true
     },
     specialty: {
       type: String,
-      required: true,
+      required: [true, 'Specialty is required'],
       trim: true
     },
     qualifications: {
@@ -34,38 +39,47 @@ const doctorSchema = new mongoose.Schema(
     },
     medicalLicenseNumber: {
       type: String,
-      required: true,
+      required: [true, 'Medical license number is required'],
       unique: true,
       trim: true
     },
+    yearsOfExperience: {
+      type: Number,
+      min: 0
+    },
     consultationFee: {
       type: Number,
-      required: true
+      required: [true, 'Consultation fee is required'],
+      min: [0, 'Consultation fee must be a positive number']
     },
-    isVerified: {
-      type: Boolean,
-      default: false
+    bio: {
+      type: String,
+      trim: true
     },
-    availability: [
-      {
-        dayOfWeek: {
-          type: String,
-          enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        },
-        startTime: {
-          type: String,
-          trim: true
-        },
-        endTime: {
-          type: String,
-          trim: true
-        },
-        isBooked: {
-          type: Boolean,
-          default: false
-        }
-      }
-    ]
+    availability: {
+      type: [availabilitySchema],
+      default: []
+    },
+    verificationStatus: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending'
+    },
+    verificationNotes: {
+      type: String,
+      trim: true
+    },
+    submittedAt: {
+      type: Date,
+      default: Date.now
+    },
+    verifiedAt: {
+      type: Date
+    },
+    verifiedBy: {
+      type: String,
+      trim: true
+    }
   },
   {
     timestamps: true
