@@ -57,6 +57,7 @@ kubectl scale deployment patient-service --replicas=0
 ## Quick Start (Local Development)
 
 Run frontend:
+## Project Structure
 
 ```powershell
 cd frontend
