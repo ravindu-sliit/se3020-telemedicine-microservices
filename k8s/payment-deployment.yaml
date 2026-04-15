@@ -22,7 +22,10 @@ spec:
             - containerPort: 5006
           env:
             - name: STRIPE_SECRET_KEY
-              value: "your_stripe_secret_key_here"
+              valueFrom:
+                secretKeyRef:
+                  name: payment-service-secrets
+                  key: STRIPE_SECRET_KEY
             - name: PAYMENT_MOCK_ONLY
               value: "false"
             - name: FRONTEND_BASE_URL

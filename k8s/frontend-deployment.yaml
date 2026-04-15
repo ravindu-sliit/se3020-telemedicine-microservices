@@ -27,3 +27,5 @@ spec:
               value: http://smart-healthcare.local/api
             - name: REACT_APP_NOTIFICATION_API_URL
               value: http://smart-healthcare.local/api
+            - name: REACT_APP_STRIPE_PUBLISHABLE_KEY
+              value: pk_test_51TMOFmDgKqLX0tFrixZipLrdRMEyI8DWt2sgkty9iHbJRnwo01vG5fegNo3kevuNpmvnZ9tt7XMMEDQkBOHPnEZa006AdfIoFv
