@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: patient-service
+  labels:
+    app: patient-service
 spec:
   replicas: 1
   selector:
@@ -14,6 +16,22 @@ spec:
     spec:
       containers:
         - name: patient-service
-          image: patient-service:latest
+          image: patient-service-image:latest
+          imagePullPolicy: Never
           ports:
-            - containerPort: 3001
+            - containerPort: 5002
+          env:
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: patient-service-secrets
+                  key: MONGODB_URI
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: patient-service-secrets
+                  key: JWT_SECRET
+            - name: CORS_ORIGIN
+              value: "http://smart-healthcare.local"
+            - name: PORT
+              value: "5002"

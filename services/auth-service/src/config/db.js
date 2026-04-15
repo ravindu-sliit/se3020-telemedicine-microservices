@@ -1,0 +1,27 @@
+const mongoose = require('mongoose');
+const env = require('./env');
+
+const connectDB = async () => {
+  try {
+    const conn = await mongoose.connect(env.mongodbUri);
+    console.log(`MongoDB connected: ${conn.connection.host}`);
+  } catch (error) {
+    if (error.message && error.message.toLowerCase().includes('authentication failed')) {
+      try {
+        const parsed = new URL(env.mongodbUri);
+        const username = decodeURIComponent(parsed.username || '');
+        const database = parsed.pathname && parsed.pathname !== '/' ? parsed.pathname.slice(1) : '(none)';
+        console.error(
+          `MongoDB auth failed for user "${username || '(missing)'}" on host "${parsed.host}" and database "${database}".`
+        );
+      } catch (parseError) {
+        // Keep original error logging if URI parsing fails.
+      }
+      console.error('Check MONGODB_URI credentials in services/auth-service/.env and verify the Atlas database user.');
+    }
+    console.error('MongoDB connection error:', error.message);
+    throw error;
+  }
+};
+
+module.exports = connectDB;
