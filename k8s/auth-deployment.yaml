@@ -1,35 +1,40 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: patient-service
+  name: auth-service-deployment
   labels:
-    app: patient-service
+    app: auth-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: patient-service
+      app: auth-service
   template:
     metadata:
       labels:
-        app: patient-service
+        app: auth-service
     spec:
       containers:
-        - name: patient-service
-          image: patient-service-image:latest
+        - name: auth-service
+          image: auth-service-image:latest
           imagePullPolicy: Never
           ports:
-            - containerPort: 5002
+            - containerPort: 5001
           env:
             - name: MONGODB_URI
               valueFrom:
                 secretKeyRef:
-                  name: patient-service-secrets
+                  name: auth-service-secrets
                   key: MONGODB_URI
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: patient-service-secrets
+                  name: auth-service-secrets
                   key: JWT_SECRET
+            - name: JWT_EXPIRES_IN
+              valueFrom:
+                secretKeyRef:
+                  name: auth-service-secrets
+                  key: JWT_EXPIRES_IN
             - name: PORT
-              value: "5002"
+              value: "5001"
