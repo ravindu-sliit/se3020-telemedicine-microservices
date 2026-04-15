@@ -71,18 +71,18 @@ const Landing = () => {
               Secure, convenient, and always available.
             </p>
             <div className="animate-fade-in-up delay-300" style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Link to="/home" className="btn btn-lg" style={{
+              <Link to="/login" className="btn btn-lg" style={{
                 background: 'white', color: '#4f46e5', fontWeight: 700,
                 boxShadow: '0 4px 20px rgba(0,0,0,0.15)', borderRadius: 16, padding: '14px 32px'
               }}>
-                Get Started Free <ArrowRightIcon style={{ width: 20, height: 20 }} />
+                Sign In to Continue <ArrowRightIcon style={{ width: 20, height: 20 }} />
               </Link>
-              <Link to="/patient" className="btn btn-lg" style={{
+              <Link to="/register" className="btn btn-lg" style={{
                 background: 'rgba(255,255,255,0.15)', color: 'white',
                 border: '2px solid rgba(255,255,255,0.3)', borderRadius: 16,
                 backdropFilter: 'blur(10px)', padding: '14px 32px'
               }}>
-                Patient Portal
+                Create Patient Account
               </Link>
             </div>
           </div>

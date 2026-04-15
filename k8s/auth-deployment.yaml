@@ -36,5 +36,7 @@ spec:
                 secretKeyRef:
                   name: auth-service-secrets
                   key: JWT_EXPIRES_IN
+            - name: CORS_ORIGIN
+              value: "http://smart-healthcare.local"
             - name: PORT
               value: "5001"

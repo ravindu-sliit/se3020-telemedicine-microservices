@@ -31,5 +31,7 @@ spec:
                 secretKeyRef:
                   name: patient-service-secrets
                   key: JWT_SECRET
+            - name: CORS_ORIGIN
+              value: "http://smart-healthcare.local"
             - name: PORT
               value: "5002"

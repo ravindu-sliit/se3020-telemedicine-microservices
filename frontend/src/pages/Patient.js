@@ -115,8 +115,8 @@ const Patient = () => {
           <div className="grid grid-cols-2 gap-3">
             {[
               { to: '/patient/book-appointment', icon: CalendarIcon, label: 'Book Appointment', color: '#4f46e5', bg: '#eef2ff' },
-              { to: '#', icon: UserIcon, label: 'Find Doctors', color: '#0ea5e9', bg: '#f0f9ff' },
-              { to: '#', icon: DocumentTextIcon, label: 'Medical Records', color: '#10b981', bg: '#ecfdf5' },
+              { to: '/doctor', icon: UserIcon, label: 'Find Doctors', color: '#0ea5e9', bg: '#f0f9ff' },
+              { to: '/patient/profile', icon: DocumentTextIcon, label: 'Medical Records', color: '#10b981', bg: '#ecfdf5' },
               { to: '/patient/symptom-checker', icon: ChatBubbleLeftRightIcon, label: 'AI Symptom Checker', color: '#7c3aed', bg: '#f5f3ff' },
             ].map((action, i) => {
               const Icon = action.icon;
