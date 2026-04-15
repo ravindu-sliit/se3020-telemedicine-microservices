@@ -53,79 +53,29 @@ app.post('/api/notifications/send', async (req, res) => {
       });
     }
 
-    const notificationTasks = [];
+    if (!emailTransporter) {
+      return res.status(400).json({
+        error: 'Email credentials are not configured.'
+      });
+    }
 
-    // Twilio SMS sending is disabled for now.
-    // if (patientPhone) {
-    //   if (!twilioClient) {
-    //     notificationTasks.push(
-    //       Promise.resolve({
-    //         channel: 'sms',
-    //         status: 'skipped',
-    //         reason: 'Twilio credentials are not configured.'
-    //       })
-    //     );
-    //   } else {
-    //     const smsTask = twilioClient.messages
-    //       .create({
-    //         body: message,
-    //         from: process.env.TWILIO_PHONE_NUMBER,
-    //         to: patientPhone
-    //       })
-    //       .then((sms) => ({
-    //         channel: 'sms',
-    //         status: 'sent',
-    //         sid: sms.sid
-    //       }));
-    //
-    //     notificationTasks.push(smsTask);
-    //   }
-    // }
+    const emailResult = await emailTransporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: patientEmail,
+      subject: 'Telemedicine Appointment Update',
+      text: message
+    });
 
-    if (patientEmail) {
-      if (!emailTransporter) {
-        notificationTasks.push(
-          Promise.resolve({
-            channel: 'email',
-            status: 'skipped',
-            reason: 'Email credentials are not configured.'
-          })
-        );
-      } else {
-        const mailOptions = {
-          from: process.env.EMAIL_USER,
-          to: patientEmail,
-          subject: 'Telemedicine Appointment Update',
-          text: message
-        };
-
-        const emailTask = emailTransporter.sendMail(mailOptions).then((emailResult) => ({
+    return res.status(200).json({
+      success: true,
+      message: 'Notifications processed.',
+      results: [
+        {
           channel: 'email',
           status: 'sent',
           messageId: emailResult.messageId
-        }));
-
-        notificationTasks.push(emailTask);
-      }
-    }
-
-    const settled = await Promise.allSettled(notificationTasks);
-    const results = settled.map((entry) =>
-      entry.status === 'fulfilled'
-        ? entry.value
-        : {
-            channel: 'unknown',
-            status: 'failed',
-            error: entry.reason?.message || 'Unknown error'
-          }
-    );
-
-    const hasFailures = results.some((result) => result.status === 'failed');
-
-    return res.status(hasFailures ? 207 : 200).json({
-      success: !hasFailures,
-      message: 'Notifications processed.',
-      results
+        }
+      ]
     });
   } catch (error) {
     console.error('Notification Service Error:', {

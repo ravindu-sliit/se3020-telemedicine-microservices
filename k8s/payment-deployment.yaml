@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service-deployment
+  labels:
+    app: payment-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payment-service
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+        - name: payment-service
+          image: payment-service-image:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5006
+          env:
+            - name: STRIPE_SECRET_KEY
+              value: "your_stripe_secret_key_here"
+            - name: PAYMENT_MOCK_ONLY
+              value: "false"
+            - name: FRONTEND_BASE_URL
+              value: "http://localhost:3000"
+            - name: PAYMENT_SUCCESS_URL
+              value: "http://localhost:3000/payments/success?session_id={CHECKOUT_SESSION_ID}"
+            - name: PAYMENT_CANCEL_URL
+              value: "http://localhost:3000/payments/cancel"

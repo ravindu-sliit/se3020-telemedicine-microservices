@@ -1,8 +1,15 @@
 {
   "name": "notification-service",
   "version": "1.0.0",
-  "description": "Notification microservice for SMS and email confirmations",
+  "description": "Notification microservice (email-first)",
   "main": "index.js",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "nodemailer": "^8.0.5",
+    "twilio": "^5.13.1"
+  },
   "scripts": {
     "start": "node index.js",
     "test": "echo \"No tests configured\""

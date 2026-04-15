@@ -3,10 +3,32 @@ kind: Ingress
 metadata:
   name: smart-healthcare-ingress
 spec:
+  ingressClassName: nginx
   rules:
     - host: smart-healthcare.local
       http:
         paths:
+          - path: /api/ai
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-symptom-checker-service
+                port:
+                  number: 5005
+          - path: /api/payments
+            pathType: Prefix
+            backend:
+              service:
+                name: payment-service
+                port:
+                  number: 5006
+          - path: /api/notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: notification-service
+                port:
+                  number: 5007
           - path: /
             pathType: Prefix
             backend:
