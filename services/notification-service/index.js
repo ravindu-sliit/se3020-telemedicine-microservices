@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+// const twilio = require('twilio');
 const nodemailer = require('nodemailer');
 
 const app = express();
@@ -9,7 +10,17 @@ const PORT = Number(process.env.PORT) || 5007;
 app.use(express.json());
 app.use(cors());
 
+// Twilio notification path is intentionally disabled.
+// const hasTwilioCredentials =
+//   Boolean(process.env.TWILIO_ACCOUNT_SID) &&
+//   Boolean(process.env.TWILIO_AUTH_TOKEN) &&
+//   Boolean(process.env.TWILIO_PHONE_NUMBER);
+
 const hasEmailCredentials = Boolean(process.env.EMAIL_USER) && Boolean(process.env.EMAIL_APP_PASSWORD);
+
+// const twilioClient = hasTwilioCredentials
+//   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+//   : null;
 
 const emailTransporter = hasEmailCredentials
   ? nodemailer.createTransport({

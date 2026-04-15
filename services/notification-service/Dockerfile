@@ -4,18 +4,17 @@ FROM node:18-alpine
 # Set the working directory inside the container
 WORKDIR /usr/src/app
 
-# Copy only the package.json and package-lock.json first
-# This is a caching trick! It speeds up future builds if dependencies haven't changed.
+# Copy only the package files first to leverage Docker cache
 COPY package*.json ./
 
-# Install dependencies strictly based on package-lock.json
+# Install dependencies
 RUN npm ci
 
-# Copy the rest of the application code
+# Copy app source
 COPY . .
 
-# Expose the notification service port
+# Expose notification service port
 EXPOSE 5007
 
-# The command to start the microservice
+# Start the service
 CMD ["npm", "start"]

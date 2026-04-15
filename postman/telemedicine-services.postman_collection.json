@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Telemedicine Services API",
-    "description": "Postman collection for AI Symptom Checker and Payment Service endpoints.",
+    "description": "Postman collection for AI Symptom Checker, Payment Service, and Notification Service endpoints.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -156,6 +156,55 @@
           }
         }
       ]
+    },
+    {
+      "name": "Notification Service",
+      "item": [
+        {
+          "name": "Health - Notification Service",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{notification_base_url}}/api/health",
+              "host": [
+                "{{notification_base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Send Email Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientEmail\": \"your.email@gmail.com\",\n  \"message\": \"Your appointment is confirmed.\"\n}"
+            },
+            "url": {
+              "raw": "{{notification_base_url}}/api/notifications/send",
+              "host": [
+                "{{notification_base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "send"
+              ]
+            }
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -166,6 +215,10 @@
     {
       "key": "payment_base_url",
       "value": "http://localhost:5006"
+    },
+    {
+      "key": "notification_base_url",
+      "value": "http://localhost:5007"
     }
   ]
 }
