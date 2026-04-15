@@ -21,7 +21,7 @@ const Home = () => {
       { title: 'Book Appointment', description: 'Schedule consultations with healthcare professionals', icon: CalendarIcon },
       { title: 'Medical Records', description: 'View and manage your medical history', icon: DocumentTextIcon },
       { title: 'Find Doctors', description: 'Search and filter doctors by specialty', icon: UserGroupIcon },
-      { title: 'AI Symptom Checker', description: 'Get preliminary health assessments', icon: CogIcon }
+      { title: 'AI Symptom Checker', description: 'Get preliminary health assessments', icon: CogIcon, path: '/patient/symptom-checker' }
     ],
     doctor: [
       { title: 'My Schedule', description: 'Manage your appointment calendar', icon: CalendarIcon },
@@ -118,9 +118,9 @@ const Home = () => {
             <div className="grid grid-cols-4 gap-5">
               {currentFeatures.map((feature, index) => {
                 const Icon = feature.icon;
-                return (
-                  <div key={index} className="card animate-fade-in-up" style={{
-                    textAlign: 'center', padding: 24, cursor: 'pointer',
+                const CardBody = (
+                  <div className="card animate-fade-in-up" style={{
+                    textAlign: 'center', padding: 24, cursor: feature.path ? 'pointer' : 'default',
                     animationDelay: `${index * 0.08}s`
                   }}>
                     <div style={{
@@ -134,6 +134,16 @@ const Home = () => {
                     <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 4, color: 'var(--gray-900)' }}>{feature.title}</h3>
                     <p style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginBottom: 0, lineHeight: 1.5 }}>{feature.description}</p>
                   </div>
+                );
+
+                return (
+                  feature.path ? (
+                    <Link key={index} to={feature.path} style={{ textDecoration: 'none' }}>
+                      {CardBody}
+                    </Link>
+                  ) : (
+                    <div key={index}>{CardBody}</div>
+                  )
                 );
               })}
             </div>

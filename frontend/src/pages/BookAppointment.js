@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   UserIcon, ClockIcon, CreditCardIcon, CheckCircleIcon,
   ArrowLeftIcon, ArrowRightIcon, StarIcon,
@@ -8,6 +8,9 @@ import {
 import Navbar from '../components/Navbar';
 
 const BookAppointment = () => {
+  const location = useLocation();
+  const suggestedSpecialty = location.state?.specialty || '';
+  const suggestedReason = location.state?.reason || '';
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
@@ -35,6 +38,14 @@ const BookAppointment = () => {
     { num: 4, label: 'Confirmation' }
   ];
 
+  const filteredDoctors = useMemo(() => {
+    if (!suggestedSpecialty) {
+      return doctors;
+    }
+
+    return doctors.filter((doctor) => doctor.specialty.toLowerCase() === suggestedSpecialty.toLowerCase());
+  }, [suggestedSpecialty]);
+
   const StepIndicator = () => (
     <div className="step-indicator">
       {steps.map((s, i) => (
@@ -57,6 +68,15 @@ const BookAppointment = () => {
         <input type="text" placeholder="Search by specialty or doctor name..." className="form-input" style={{ flex: 1 }} />
         <button className="btn btn-primary">Search</button>
       </div>
+      {suggestedSpecialty && (
+        <div className="card" style={{ marginBottom: 20, padding: 16, border: '1px solid #ddd6fe', background: '#f5f3ff' }}>
+          <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--primary-600)', fontWeight: 700, marginBottom: 6 }}>
+            AI Recommendation
+          </div>
+          <div style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 6, color: 'var(--gray-900)' }}>{suggestedSpecialty}</div>
+          {suggestedReason && <p style={{ marginBottom: 0, color: 'var(--gray-600)', lineHeight: 1.6 }}>{suggestedReason}</p>}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
         {['All','Cardiology','Dermatology','Pediatrics','Orthopedics'].map((s, i) => (
           <span key={s} style={{
@@ -68,7 +88,7 @@ const BookAppointment = () => {
         ))}
       </div>
       <div className="grid grid-cols-2 gap-5">
-        {doctors.map(doc => (
+        {filteredDoctors.map(doc => (
           <div key={doc.id} className="card" style={{ cursor: 'pointer', padding: 24 }} onClick={() => { setSelectedDoctor(doc); setCurrentStep(2); }}>
             <div style={{ display: 'flex', gap: 16 }}>
               <div style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

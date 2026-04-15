@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-symptom-checker-deployment
+  labels:
+    app: ai-symptom-checker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-symptom-checker
+  template:
+    metadata:
+      labels:
+        app: ai-symptom-checker
+    spec:
+      containers:
+        - name: ai-symptom-checker
+          image: ai-symptom-checker-image:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5005
+          env:
+            - name: GEMINI_API_KEY
+              value: "AIzaSyCfxlPBomBVKDB7au5zU1Jby8_QC5SBhgI"
+            - name: GEMINI_MODEL
+              value: "gemini-2.5-flash"

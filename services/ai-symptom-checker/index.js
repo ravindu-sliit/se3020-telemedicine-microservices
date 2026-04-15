@@ -6,11 +6,12 @@ const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
 const app = express();
 const PORT = Number(process.env.PORT) || 5005;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY) && process.env.GEMINI_API_KEY !== 'your_gemini_api_key_here';
 
 app.use(express.json());
 app.use(cors());
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = hasGeminiKey ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
 
 const symptomSchema = {
   type: SchemaType.OBJECT,
@@ -29,6 +30,51 @@ const symptomSchema = {
   required: ['preliminarySuggestion', 'recommendedSpecialty']
 };
 
+const buildFallbackRecommendation = (symptoms = '') => {
+  const normalizedSymptoms = symptoms.toLowerCase();
+
+  const matches = [
+    {
+      keywords: ['chest pain', 'shortness of breath', 'palpitations', 'heart'],
+      specialty: 'Cardiologist'
+    },
+    {
+      keywords: ['rash', 'itching', 'skin', 'eczema', 'hives', 'acne'],
+      specialty: 'Dermatologist'
+    },
+    {
+      keywords: ['headache', 'dizziness', 'migraine', 'seizure', 'numbness'],
+      specialty: 'Neurologist'
+    },
+    {
+      keywords: ['fever', 'cough', 'sore throat', 'cold', 'flu'],
+      specialty: 'General Physician'
+    },
+    {
+      keywords: ['bone', 'joint', 'fracture', 'sprain', 'back pain'],
+      specialty: 'Orthopedist'
+    },
+    {
+      keywords: ['stomach', 'abdominal', 'nausea', 'vomiting', 'diarrhea'],
+      specialty: 'General Physician'
+    },
+    {
+      keywords: ['child', 'baby', 'infant', 'pediatric'],
+      specialty: 'Pediatrician'
+    }
+  ];
+
+  const matchedSpecialty = matches.find((entry) =>
+    entry.keywords.some((keyword) => normalizedSymptoms.includes(keyword))
+  )?.specialty || 'General Physician';
+
+  return {
+    preliminarySuggestion:
+      'This is a preliminary suggestion only and is not a medical diagnosis. Please consult a healthcare professional for proper evaluation.',
+    recommendedSpecialty: matchedSpecialty
+  };
+};
+
 app.post('/api/ai/check-symptoms', async (req, res) => {
   try {
     const { symptoms } = req.body;
@@ -37,8 +83,11 @@ app.post('/api/ai/check-symptoms', async (req, res) => {
       return res.status(400).json({ error: 'Symptoms are required.' });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({ error: 'GEMINI_API_KEY is not configured.' });
+    if (!hasGeminiKey) {
+      return res.status(200).json({
+        ...buildFallbackRecommendation(symptoms),
+        mode: 'fallback'
+      });
     }
 
     const model = genAI.getGenerativeModel({
@@ -57,6 +106,13 @@ app.post('/api/ai/check-symptoms', async (req, res) => {
 
     return res.json(aiData);
   } catch (error) {
+    if (String(error?.message || '').includes('API key not valid')) {
+      return res.status(200).json({
+        ...buildFallbackRecommendation(req.body?.symptoms),
+        mode: 'fallback'
+      });
+    }
+
     const isProduction = process.env.NODE_ENV === 'production';
     const errorStatus = error?.status || error?.response?.status || 500;
     const debugDetails = {

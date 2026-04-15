@@ -10,6 +10,7 @@ import Doctor from './pages/Doctor';
 import Admin from './pages/Admin';
 import BookAppointment from './pages/BookAppointment';
 import TelemedicineRoom from './pages/TelemedicineRoom';
+import SymptomChecker from './pages/SymptomChecker';
 
 function App() {
   // For demo purposes, set a default role
@@ -31,6 +32,7 @@ function App() {
           
           {/* Patient Routes */}
           <Route path="/patient" element={<Patient />} />
+          <Route path="/patient/symptom-checker" element={<SymptomChecker />} />
           <Route path="/patient/book-appointment" element={<BookAppointment />} />
           
           {/* Doctor Routes */}
