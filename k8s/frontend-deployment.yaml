@@ -21,6 +21,10 @@ spec:
           ports:
             - containerPort: 80
           env:
+            - name: REACT_APP_AUTH_API_URL
+              value: http://smart-healthcare.local/api
+            - name: REACT_APP_PATIENT_API_URL
+              value: http://smart-healthcare.local/api
             - name: REACT_APP_AI_API_URL
               value: http://smart-healthcare.local/api
             - name: REACT_APP_PAYMENT_API_URL
