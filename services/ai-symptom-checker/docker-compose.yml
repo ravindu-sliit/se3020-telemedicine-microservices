@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  ai-symptom-checker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-symptom-checker
+    ports:
+      - "5005:5005"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5005/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
