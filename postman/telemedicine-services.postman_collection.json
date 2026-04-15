@@ -15,8 +15,13 @@
             "header": [],
             "url": {
               "raw": "{{ai_base_url}}/api/health",
-              "host": ["{{ai_base_url}}"],
-              "path": ["api", "health"]
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
             }
           }
         },
@@ -24,15 +29,53 @@
           "name": "Check Symptoms",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"symptoms\": \"fever, cough, sore throat\"\n}"
             },
             "url": {
               "raw": "{{ai_base_url}}/api/ai/check-symptoms",
-              "host": ["{{ai_base_url}}"],
-              "path": ["api", "ai", "check-symptoms"]
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "check-symptoms"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Check Symptoms - Validation Error",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{ai_base_url}}/api/ai/check-symptoms",
+              "host": [
+                "{{ai_base_url}}"
+              ],
+              "path": [
+                "api",
+                "ai",
+                "check-symptoms"
+              ]
             }
           }
         }
@@ -48,8 +91,13 @@
             "header": [],
             "url": {
               "raw": "{{payment_base_url}}/api/health",
-              "host": ["{{payment_base_url}}"],
-              "path": ["api", "health"]
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
             }
           }
         },
@@ -57,15 +105,53 @@
           "name": "Create Checkout Session",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"appointmentId\": \"APT-2002\",\n  \"amount\": 1250\n}"
             },
             "url": {
               "raw": "{{payment_base_url}}/api/payments/checkout",
-              "host": ["{{payment_base_url}}"],
-              "path": ["api", "payments", "checkout"]
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "checkout"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Checkout Session - Invalid Amount",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"appointmentId\": \"APT-2002\",\n  \"amount\": -1\n}"
+            },
+            "url": {
+              "raw": "{{payment_base_url}}/api/payments/checkout",
+              "host": [
+                "{{payment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "payments",
+                "checkout"
+              ]
             }
           }
         }
@@ -81,8 +167,13 @@
             "header": [],
             "url": {
               "raw": "{{notification_base_url}}/api/health",
-              "host": ["{{notification_base_url}}"],
-              "path": ["api", "health"]
+              "host": [
+                "{{notification_base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
             }
           }
         },
@@ -90,15 +181,26 @@
           "name": "Send Email Notification",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"patientEmail\": \"your.email@gmail.com\",\n  \"message\": \"Your appointment is confirmed.\"\n}"
             },
             "url": {
               "raw": "{{notification_base_url}}/api/notifications/send",
-              "host": ["{{notification_base_url}}"],
-              "path": ["api", "notifications", "send"]
+              "host": [
+                "{{notification_base_url}}"
+              ],
+              "path": [
+                "api",
+                "notifications",
+                "send"
+              ]
             }
           }
         }
@@ -106,8 +208,17 @@
     }
   ],
   "variable": [
-    { "key": "ai_base_url", "value": "http://localhost:5005" },
-    { "key": "payment_base_url", "value": "http://localhost:5006" },
-    { "key": "notification_base_url", "value": "http://localhost:5007" }
+    {
+      "key": "ai_base_url",
+      "value": "http://localhost:5005"
+    },
+    {
+      "key": "payment_base_url",
+      "value": "http://localhost:5006"
+    },
+    {
+      "key": "notification_base_url",
+      "value": "http://localhost:5007"
+    }
   ]
 }
