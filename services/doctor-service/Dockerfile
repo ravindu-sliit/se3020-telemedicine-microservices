@@ -14,8 +14,8 @@ RUN npm ci
 # Copy the rest of the application code
 COPY . .
 
-# Expose the port the app runs on (tell your team to standardize this, e.g., 5000)
-EXPOSE 5000
+# Expose the doctor-service runtime port
+EXPOSE 5003
 
 # The command to start the microservice
 CMD ["npm", "start"]

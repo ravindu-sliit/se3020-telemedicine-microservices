@@ -5,7 +5,7 @@ Smart healthcare platform with a React frontend and Node.js microservices.
 ## What This Repo Includes
 
 - Frontend UI for authentication and patient profile management
-- Backend microservices (auth, patient, AI symptom checker, payment, notification)
+- Backend microservices (auth, patient, doctor, AI symptom checker, payment, notification)
 - Kubernetes manifests for local cluster deployment
 - Postman collection and environments for API verification
 
@@ -32,6 +32,7 @@ Smart healthcare platform with a React frontend and Node.js microservices.
 - AI API: `/api/ai/*`
 - Payment API: `/api/payments/*`
 - Notification API: `/api/notifications/*`
+- Doctor API: `/api/doctors/*`
 
 ### Kubernetes
 
@@ -40,6 +41,7 @@ Deployments and services are included for:
 - frontend
 - auth-service
 - patient-service
+- doctor-service
 - ai-symptom-checker
 - payment-service
 - notification-service
@@ -69,6 +71,7 @@ docker build -t frontend-image:latest .\frontend
 docker build -t ai-symptom-checker-image:latest .\services\ai-symptom-checker
 docker build -t auth-service-image:latest .\services\auth-service
 docker build -t patient-service-image:latest .\services\patient-service
+docker build -t doctor-service-image:latest .\services\doctor-service
 docker build -t payment-service-image:latest .\services\payment-service
 docker build -t notification-service-image:latest .\services\notification-service
 ```
@@ -80,6 +83,7 @@ Create secret files from templates:
 ```powershell
 Copy-Item .\k8s\auth-secret.example.yaml .\k8s\auth-secret.yaml
 Copy-Item .\k8s\patient-secret.example.yaml .\k8s\patient-secret.yaml
+Copy-Item .\k8s\doctor-secret.example.yaml .\k8s\doctor-secret.yaml
 Copy-Item .\k8s\payment-secret.example.yaml .\k8s\payment-secret.yaml
 ```
 
@@ -88,6 +92,7 @@ Fill real values, then apply:
 ```powershell
 kubectl apply -f .\k8s\auth-secret.yaml
 kubectl apply -f .\k8s\patient-secret.yaml
+kubectl apply -f .\k8s\doctor-secret.yaml
 kubectl apply -f .\k8s\payment-secret.yaml
 ```
 
@@ -95,7 +100,7 @@ kubectl apply -f .\k8s\payment-secret.yaml
 
 ```powershell
 Get-ChildItem .\k8s\*.yaml |
-  Where-Object { $_.Name -notin @('auth-secret.example.yaml', 'patient-secret.example.yaml', 'payment-secret.example.yaml') } |
+   Where-Object { $_.Name -notin @('auth-secret.example.yaml', 'patient-secret.example.yaml', 'doctor-secret.example.yaml', 'payment-secret.example.yaml') } |
   ForEach-Object { kubectl apply -f $_.FullName }
 ```
 
@@ -125,6 +130,7 @@ Default API targets in frontend service layer:
 
 - auth: `http://localhost:5001/api`
 - patient: `http://localhost:5002/api`
+- doctor: `http://localhost:5003/api`
 - ai: `http://localhost:5005/api`
 - payment: `http://localhost:5006/api`
 - notification: `http://localhost:5007/api`
