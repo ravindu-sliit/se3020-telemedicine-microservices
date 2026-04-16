@@ -20,6 +20,10 @@ const doctorSchema = new mongoose.Schema({
         unique: true, 
         trim: true 
     },
+    fullName: { 
+        type: String, 
+        trim: true 
+    },
     specialty: { 
         type: String, 
         required: [true, 'Specialty is required'], 

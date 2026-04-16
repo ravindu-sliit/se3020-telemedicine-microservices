@@ -17,7 +17,7 @@ spec:
       containers:
         - name: ai-symptom-checker
           image: ai-symptom-checker-image:latest
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5005
           env:

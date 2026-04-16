@@ -1,0 +1,528 @@
+{
+  "info": {
+    "_postman_id": "9a1ea1e5-92c9-4240-80d5-4e1124d216f1",
+    "name": "Telemedicine",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "36816058"
+  },
+  "item": [
+    {
+      "name": "Doctor Service",
+      "item": [
+        {
+          "name": "Register the Doctor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"fullName\": \"Anjana Deshan\",\r\n  \"email\": \"doctor@example.com\",\r\n  \"password\": \"password123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:5001/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5001",
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Log in to get the Doctor Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"email\": \"doctor@example.com\",\r\n  \"password\": \"password123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:5001/api/auth/login",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5001",
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply for a Doctor Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"specialty\": \"Cardiology\",\r\n  \"medicalLicenseNumber\": \"MED-987654\",\r\n  \"consultationFee\": 2500,\r\n  \"yearsOfExperience\": 12,\r\n  \"bio\": \"Senior cardiologist specializing in preventative care.\",\r\n  \"qualifications\": [\"MBBS\", \"MD Cardiology\"]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:5002/api/doctors/apply",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5002",
+              "path": [
+                "api",
+                "doctors",
+                "apply"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Doctor Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5002/api/doctors/me",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5002",
+              "path": [
+                "api",
+                "doctors",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update My Doctor Profile (While Pending)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"consultationFee\": 3000,\r\n  \"availability\": [\r\n    {\r\n      \"dayOfWeek\": \"Monday\",\r\n      \"startTime\": \"09:00\",\r\n      \"endTime\": \"13:00\"\r\n    },\r\n    {\r\n      \"dayOfWeek\": \"Wednesday\",\r\n      \"startTime\": \"14:00\",\r\n      \"endTime\": \"18:00\"\r\n    }\r\n  ]\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:5002/api/doctors/me",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5002",
+              "path": [
+                "api",
+                "doctors",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Issue a Digital Prescription",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"patientId\": \"patient123\",\r\n  \"prescriptionText\": \"Amoxicillin 500mg, one capsule every 8 hours for 7 days.\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "http://localhost:5002/api/doctors/prescriptions",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5002",
+              "path": [
+                "api",
+                "doctors",
+                "prescriptions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "View Patient Reports",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5002/api/doctors/patients/patient123/reports",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5002",
+              "path": [
+                "api",
+                "doctors",
+                "patients",
+                "patient123",
+                "reports"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Disable Doctor Profile",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:5002/api/doctors/disable",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "5002",
+              "path": [
+                "api",
+                "doctors",
+                "disable"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Appointment Service",
+      "item": [
+        {
+          "name": "patient register",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"fullName\": \"jack ma\",\r\n  \"email\": \"jak@example.com\",\r\n  \"password\": \"password123\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{auth_base_url}}/api/auth/register",
+              "host": [
+                "{{auth_base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Book a New Appointment",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"doctorId\": \"69dff942f5657d68b1110080\", \r\n  \"appointmentDate\": \"2026-05-15T00:00:00.000Z\",\r\n  \"timeSlot\": \"09:00\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{appointment_base_url}}/api/appointments",
+              "host": [
+                "{{appointment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Appointments (patient)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{appointment_base_url}}/api/appointments/patient/me",
+              "host": [
+                "{{appointment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "patient",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel My Appointment (patient)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{appointment_base_url}}/api/appointments/69e0024dc33e122a3d368373/cancel",
+              "host": [
+                "{{appointment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "69e0024dc33e122a3d368373",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reschedule My Appointment (patient)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patientToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"newAppointmentDate\": \"2026-05-20T00:00:00.000Z\",\r\n  \"newTimeSlot\": \"11:30\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{appointment_base_url}}/api/appointments/69e0024dc33e122a3d368373/reschedule",
+              "host": [
+                "{{appointment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "69e0024dc33e122a3d368373",
+                "reschedule"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Appointment Queue (Doctor)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{appointment_base_url}}/api/appointments/doctor/me",
+              "host": [
+                "{{appointment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "doctor",
+                "me"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm an Appointment by doctor (Generates Telemedicine Link)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctorToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\r\n  \"status\": \"Confirmed\"\r\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{appointment_base_url}}/api/appointments/69e0024dc33e122a3d368373/status",
+              "host": [
+                "{{appointment_base_url}}"
+              ],
+              "path": [
+                "api",
+                "appointments",
+                "69e0024dc33e122a3d368373",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

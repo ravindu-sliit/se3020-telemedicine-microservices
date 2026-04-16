@@ -6,6 +6,7 @@ const {
     getMyDoctorProfile,
     updateMyDoctorProfile,
     getPendingDoctorApplications,
+    getAllApprovedDoctors,
     getDoctorApplicationById,
     approveDoctorApplication,
     rejectDoctorApplication,
@@ -21,6 +22,7 @@ const authorizeRoles = require('../middleware/roleMiddleware');
 router.post('/apply', protect, authorizeRoles('doctor'), applyDoctorProfile);
 router.get('/me', protect, authorizeRoles('doctor'), getMyDoctorProfile);
 router.put('/me', protect, authorizeRoles('doctor'), updateMyDoctorProfile);
+router.get('/', protect, authorizeRoles('admin', 'patient', 'doctor'), getAllApprovedDoctors);
 
 router.get('/pending', protect, authorizeRoles('admin'), getPendingDoctorApplications);
 router.get('/:doctorId', protect, authorizeRoles('admin'), getDoctorApplicationById);
