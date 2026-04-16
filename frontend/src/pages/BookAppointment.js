@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   UserIcon, ClockIcon, CreditCardIcon, CheckCircleIcon,
@@ -6,8 +6,18 @@ import {
   CurrencyDollarIcon, ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import Navbar from '../components/Navbar';
+import { getSession } from '../services/session';
+import { fetchAllDoctors, createAppointment } from '../services/api';
+
+const getDoctorDisplayName = (doctor) => doctor?.userId?.fullName || doctor?.fullName || doctor?.name || 'Doctor';
+const getDoctorSpecialty = (doctor) => doctor?.specialty || 'General Medicine';
+const getDoctorFee = (doctor) => {
+  const fee = Number(doctor?.consultationFee);
+  return Number.isFinite(fee) ? fee : 0;
+};
 
 const BookAppointment = () => {
+  const session = getSession();
   const location = useLocation();
   const suggestedSpecialty = location.state?.specialty || '';
   const suggestedReason = location.state?.reason || '';
@@ -16,15 +26,98 @@ const BookAppointment = () => {
   const [selectedTime, setSelectedTime] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
 
-  const doctors = [
-    { id: 1, name: 'Dr. Sarah Johnson', specialty: 'Cardiology', rating: 4.8, experience: '15 years', consultationFee: 150, availability: ['Mon','Tue','Wed','Thu','Fri'], education: 'Harvard Medical School', languages: ['English','Spanish'] },
-    { id: 2, name: 'Dr. Michael Chen', specialty: 'Dermatology', rating: 4.9, experience: '12 years', consultationFee: 120, availability: ['Mon','Tue','Thu','Fri'], education: 'Johns Hopkins University', languages: ['English','Mandarin'] },
-    { id: 3, name: 'Dr. Emily Brown', specialty: 'Pediatrics', rating: 4.7, experience: '10 years', consultationFee: 100, availability: ['Mon','Wed','Thu','Fri'], education: 'Stanford Medical School', languages: ['English','French'] },
-    { id: 4, name: 'Dr. James Wilson', specialty: 'Orthopedics', rating: 4.6, experience: '18 years', consultationFee: 180, availability: ['Tue','Wed','Thu','Fri'], education: 'Mayo Clinic School of Medicine', languages: ['English'] }
-  ];
+  const [doctors, setDoctors] = useState([]);
+  const [doctorsLoading, setDoctorsLoading] = useState(true);
+  const [doctorsError, setDoctorsError] = useState('');
 
-  const availableDates = ['2024-03-29','2024-03-30','2024-03-31','2024-04-01','2024-04-02','2024-04-03','2024-04-04'];
-  const timeSlots = ['09:00 AM','09:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','02:00 PM','02:30 PM','03:00 PM','03:30 PM','04:00 PM','04:30 PM'];
+  useEffect(() => {
+    const loadDoctors = async () => {
+      setDoctorsLoading(true);
+      setDoctorsError('');
+      try {
+        const response = await fetchAllDoctors();
+        const records = Array.isArray(response?.data) ? response.data : [];
+        setDoctors(records);
+      } catch (error) {
+        setDoctorsError(error.message || 'Failed to load doctors.');
+        setDoctors([]);
+      } finally {
+        setDoctorsLoading(false);
+      }
+    };
+    loadDoctors();
+  }, []);
+
+  // Generate next 7 days dynamically
+  const availableDates = useMemo(() => {
+    const dates = [];
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    return dates;
+  }, []);
+
+  const availableTimeSlots = useMemo(() => {
+    if (!selectedDate || !selectedDoctor) return [];
+    
+    // Calculate the day of the week for the selected date
+    const dateObj = new Date(selectedDate);
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayOfWeek = days[dateObj.getDay()];
+
+    const doctorAvail = selectedDoctor.availability || [];
+    const dayAvail = doctorAvail.filter(a => a.dayOfWeek === dayOfWeek);
+
+    const baseSlots = [
+      '08:00 AM','08:30 AM','09:00 AM','09:30 AM','10:00 AM','10:30 AM',
+      '11:00 AM','11:30 AM','12:00 PM','12:30 PM','01:00 PM','01:30 PM',
+      '02:00 PM','02:30 PM','03:00 PM','03:30 PM','04:00 PM','04:30 PM',
+      '05:00 PM','05:30 PM','06:00 PM','06:30 PM','07:00 PM','07:30 PM'
+    ];
+
+    if (dayAvail.length === 0) return baseSlots;
+
+    const timeToNumber = (tStr) => {
+       if (!tStr || typeof tStr !== 'string') return null;
+
+       const value = tStr.trim().toUpperCase();
+       const twelveHourMatch = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+       if (twelveHourMatch) {
+         let hours = Number(twelveHourMatch[1]);
+         const minutes = Number(twelveHourMatch[2]);
+         const period = twelveHourMatch[3];
+
+         if (period === 'PM' && hours !== 12) hours += 12;
+         if (period === 'AM' && hours === 12) hours = 0;
+
+         return hours + (minutes / 60);
+       }
+
+       const twentyFourHourMatch = value.match(/^(\d{1,2}):(\d{2})$/);
+       if (twentyFourHourMatch) {
+         const hours = Number(twentyFourHourMatch[1]);
+         const minutes = Number(twentyFourHourMatch[2]);
+         if (hours > 23 || minutes > 59) return null;
+         return hours + (minutes / 60);
+       }
+
+       return null;
+    };
+
+    return baseSlots.filter(slot => {
+       const slotValue = timeToNumber(slot);
+       return dayAvail.some(block => {
+          const start = timeToNumber(block.startTime);
+          const end = timeToNumber(block.endTime);
+         if (start === null || end === null) return false;
+          return slotValue >= start && slotValue <= end;
+       });
+    });
+
+  }, [selectedDate, selectedDoctor]);
+
   const paymentMethods = [
     { id: 'card', name: 'Credit/Debit Card', icon: CreditCardIcon },
     { id: 'paypal', name: 'PayPal', icon: ShieldCheckIcon },
@@ -39,12 +132,17 @@ const BookAppointment = () => {
   ];
 
   const filteredDoctors = useMemo(() => {
-    if (!suggestedSpecialty) {
-      return doctors;
-    }
+    if (!suggestedSpecialty) return doctors;
 
-    return doctors.filter((doctor) => doctor.specialty.toLowerCase() === suggestedSpecialty.toLowerCase());
-  }, [suggestedSpecialty]);
+    const normalizedSuggested = suggestedSpecialty.trim().toLowerCase();
+    const filtered = doctors.filter((doctor) => {
+      const specialty = (doctor.specialty || '').toLowerCase();
+      const name = getDoctorDisplayName(doctor).toLowerCase();
+      return specialty.includes(normalizedSuggested) || normalizedSuggested.includes(specialty) || name.includes(normalizedSuggested);
+    });
+
+    return filtered.length > 0 ? filtered : doctors;
+  }, [suggestedSpecialty, doctors]);
 
   const StepIndicator = () => (
     <div className="step-indicator">
@@ -77,51 +175,49 @@ const BookAppointment = () => {
           {suggestedReason && <p style={{ marginBottom: 0, color: 'var(--gray-600)', lineHeight: 1.6 }}>{suggestedReason}</p>}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 24 }}>
-        {['All','Cardiology','Dermatology','Pediatrics','Orthopedics'].map((s, i) => (
-          <span key={s} style={{
-            padding: '6px 16px', borderRadius: 999, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
-            background: i === 0 ? 'var(--primary-600)' : 'var(--gray-100)',
-            color: i === 0 ? 'white' : 'var(--gray-600)',
-            transition: 'all 0.2s ease'
-          }}>{s}</span>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-5">
-        {filteredDoctors.map(doc => (
-          <div key={doc.id} className="card" style={{ cursor: 'pointer', padding: 24 }} onClick={() => { setSelectedDoctor(doc); setCurrentStep(2); }}>
-            <div style={{ display: 'flex', gap: 16 }}>
-              <div style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <UserIcon style={{ width: 28, height: 28, color: 'var(--primary-500)' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 4, color: 'var(--gray-900)' }}>{doc.name}</h3>
-                <p style={{ fontSize: '0.85rem', color: 'var(--gray-500)', marginBottom: 8 }}>{doc.specialty}</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, fontSize: '0.8rem' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
-                    <StarIcon style={{ width: 14, height: 14, color: '#f59e0b' }} /> {doc.rating}
-                  </span>
-                  <span style={{ color: 'var(--gray-400)' }}>•</span>
-                  <span style={{ color: 'var(--gray-500)' }}>{doc.experience}</span>
-                  <span style={{ color: 'var(--gray-400)' }}>•</span>
-                  <span style={{ fontWeight: 700, color: 'var(--primary-600)' }}>${doc.consultationFee}</span>
+      {doctorsLoading ? (
+        <div className="loading-state">Loading available doctors...</div>
+      ) : doctorsError ? (
+        <div className="error-state">{doctorsError}</div>
+      ) : filteredDoctors.length === 0 ? (
+        <div style={{ color: 'var(--gray-500)', padding: '20px 0' }}>No doctors available at this time.</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-5">
+          {filteredDoctors.map((doc, idx) => (
+            <div key={doc._id || doc.id || idx} className="card" style={{ cursor: 'pointer', padding: 24 }}
+              onClick={() => { setSelectedDoctor(doc); setCurrentStep(2); }}>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <div style={{ width: 56, height: 56, borderRadius: 16, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <UserIcon style={{ width: 28, height: 28, color: 'var(--primary-500)' }} />
                 </div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginBottom: 8 }}>
-                  {doc.education} • {doc.languages.join(', ')}
-                </div>
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                  {doc.availability.map(d => (
-                    <span key={d} style={{ fontSize: '0.7rem', background: 'var(--success-50)', color: 'var(--success-700)', padding: '2px 8px', borderRadius: 6, fontWeight: 600 }}>{d}</span>
-                  ))}
+                <div style={{ flex: 1 }}>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 4, color: 'var(--gray-900)' }}>
+                    {getDoctorDisplayName(doc)}
+                  </h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--gray-500)', marginBottom: 8 }}>{getDoctorSpecialty(doc)}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, fontSize: '0.8rem' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                      <StarIcon style={{ width: 14, height: 14, color: '#f59e0b' }} /> {doc.rating || '4.5'}
+                    </span>
+                    <span style={{ color: 'var(--gray-400)' }}>•</span>
+                    <span style={{ color: 'var(--gray-500)' }}>{doc.yearsOfExperience ? `${doc.yearsOfExperience} yrs` : 'Experienced'}</span>
+                    <span style={{ color: 'var(--gray-400)' }}>•</span>
+                    <span style={{ fontWeight: 700, color: 'var(--primary-600)' }}>${getDoctorFee(doc)}</span>
+                  </div>
+                  {Array.isArray(doc.qualifications) && doc.qualifications.length > 0 && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginBottom: 4 }}>
+                      {doc.qualifications.join(', ')}
+                    </div>
+                  )}
                 </div>
               </div>
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--gray-100)' }}>
+                <button className="btn btn-primary w-full">Select Doctor</button>
+              </div>
             </div>
-            <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--gray-100)' }}>
-              <button className="btn btn-primary w-full">Select Doctor</button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
@@ -133,8 +229,12 @@ const BookAppointment = () => {
             <UserIcon style={{ width: 22, height: 22, color: 'var(--primary-500)' }} />
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--gray-900)' }}>{selectedDoctor.name}</div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>{selectedDoctor.specialty} • ${selectedDoctor.consultationFee}</div>
+            <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--gray-900)' }}>
+              {getDoctorDisplayName(selectedDoctor)}
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+              {getDoctorSpecialty(selectedDoctor)} • ${getDoctorFee(selectedDoctor)}
+            </div>
           </div>
         </div>
       </div>
@@ -159,18 +259,24 @@ const BookAppointment = () => {
       </div>
       <div className="card">
         <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 16 }}>Time Slots</h3>
-        <div className="grid grid-cols-4 gap-3">
-          {timeSlots.map(time => (
-            <button key={time} onClick={() => setSelectedTime(time)} style={{
-              padding: '10px', borderRadius: 12, border: selectedTime === time ? '2px solid var(--primary-500)' : '2px solid var(--gray-100)',
-              background: selectedTime === time ? 'var(--primary-50)' : 'white', cursor: 'pointer',
-              textAlign: 'center', transition: 'all 0.2s ease', fontFamily: 'inherit'
-            }}>
-              <ClockIcon style={{ width: 16, height: 16, margin: '0 auto 4px', color: selectedTime === time ? 'var(--primary-600)' : 'var(--gray-400)' }} />
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: selectedTime === time ? 'var(--primary-700)' : 'var(--gray-600)' }}>{time}</div>
-            </button>
-          ))}
-        </div>
+        {availableTimeSlots.length === 0 ? (
+          <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem', textAlign: 'center', padding: '24px 0', background: 'var(--gray-50)', borderRadius: 12 }}>
+            No available time slots on this date according to the doctor's schedule. Please select a different date.
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-3">
+            {availableTimeSlots.map(time => (
+              <button key={time} onClick={() => setSelectedTime(time)} style={{
+                padding: '10px', borderRadius: 12, border: selectedTime === time ? '2px solid var(--primary-500)' : '2px solid var(--gray-100)',
+                background: selectedTime === time ? 'var(--primary-50)' : 'white', cursor: 'pointer',
+                textAlign: 'center', transition: 'all 0.2s ease', fontFamily: 'inherit'
+              }}>
+                <ClockIcon style={{ width: 16, height: 16, margin: '0 auto 4px', color: selectedTime === time ? 'var(--primary-600)' : 'var(--gray-400)' }} />
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, color: selectedTime === time ? 'var(--primary-700)' : 'var(--gray-600)' }}>{time}</div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28 }}>
         <button onClick={() => setCurrentStep(1)} className="btn btn-secondary"><ArrowLeftIcon style={{ width: 16, height: 16 }} /> Back</button>
@@ -186,9 +292,9 @@ const BookAppointment = () => {
           <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 16 }}>Appointment Summary</h3>
           <div className="space-y-3">
             {[
-              ['Doctor', selectedDoctor.name], ['Specialty', selectedDoctor.specialty],
+              ['Doctor', getDoctorDisplayName(selectedDoctor)], ['Specialty', getDoctorSpecialty(selectedDoctor)],
               ['Date', selectedDate], ['Time', selectedTime],
-              ['Fee', '$' + selectedDoctor.consultationFee], ['Service Charge', '$5']
+              ['Fee', '$' + getDoctorFee(selectedDoctor)], ['Service Charge', '$5']
             ].map(([l, v]) => (
               <div key={l} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                 <span style={{ color: 'var(--gray-500)' }}>{l}</span>
@@ -197,7 +303,7 @@ const BookAppointment = () => {
             ))}
             <div style={{ borderTop: '1px solid var(--gray-100)', paddingTop: 12, display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ fontWeight: 700 }}>Total</span>
-              <span style={{ fontWeight: 800, color: 'var(--primary-600)', fontSize: '1.1rem' }}>${selectedDoctor.consultationFee + 5}</span>
+              <span style={{ fontWeight: 800, color: 'var(--primary-600)', fontSize: '1.1rem' }}>${getDoctorFee(selectedDoctor) + 5}</span>
             </div>
           </div>
         </div>
@@ -229,7 +335,21 @@ const BookAppointment = () => {
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28 }}>
         <button onClick={() => setCurrentStep(2)} className="btn btn-secondary"><ArrowLeftIcon style={{ width: 16, height: 16 }} /> Back</button>
-        <button onClick={() => setCurrentStep(4)} className="btn btn-primary">Complete Payment <ArrowRightIcon style={{ width: 16, height: 16 }} /></button>
+        <button onClick={async () => {
+          try {
+            await createAppointment({
+              doctorId: selectedDoctor.userId?._id || selectedDoctor.userId || selectedDoctor._id,
+              doctorName: getDoctorDisplayName(selectedDoctor),
+              patientName: session?.user?.fullName || 'Patient',
+              appointmentDate: selectedDate,
+              timeSlot: selectedTime,
+              reason: 'Consultation'
+            });
+            setCurrentStep(4);
+          } catch (e) {
+            alert('Failed to book appointment: ' + e.message);
+          }
+        }} disabled={!selectedDoctor || !(selectedDoctor.userId?._id || selectedDoctor.userId || selectedDoctor._id)} className="btn btn-primary">Complete Payment <ArrowRightIcon style={{ width: 16, height: 16 }} /></button>
       </div>
     </div>
   );
@@ -249,9 +369,9 @@ const BookAppointment = () => {
           <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 16, textAlign: 'center' }}>Details</h3>
           <div className="grid grid-cols-2 gap-4">
             {[
-              ['Doctor', selectedDoctor.name], ['Specialty', selectedDoctor.specialty],
+              ['Doctor', getDoctorDisplayName(selectedDoctor)], ['Specialty', getDoctorSpecialty(selectedDoctor)],
               ['Date', selectedDate], ['Time', selectedTime],
-              ['Fee', '$' + selectedDoctor.consultationFee],
+              ['Fee', '$' + getDoctorFee(selectedDoctor)],
               ['Confirmation', 'APT-' + Math.random().toString(36).substr(2, 9).toUpperCase()]
             ].map(([l, v]) => (
               <div key={l}>

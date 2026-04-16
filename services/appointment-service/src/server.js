@@ -13,10 +13,10 @@ const startServer = async () => {
   try {
     await connectDB();
     app.listen(env.port, () => {
-      console.log(`doctor-service running on port ${env.port}`);
+      console.log(`appointment-service running on port ${env.port}`);
     });
   } catch (error) {
-    console.error('Failed to start doctor-service:', error.message);
+    console.error('Failed to start appointment-service:', error.message);
     process.exit(1);
   }
 };

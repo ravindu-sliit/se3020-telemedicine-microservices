@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
-
+const axios = require('axios');
 const Doctor = require('../models/Doctor');
 
 const editableDoctorFields = [
+  'fullName',
   'specialty',
   'qualifications',
   'medicalLicenseNumber',
@@ -12,19 +13,27 @@ const editableDoctorFields = [
   'availability'
 ];
 
-const normalizeStringArray = (value) => {
-  if (!value) {
-    return [];
-  }
+const DEFAULT_CONSULTATION_FEE = Number(process.env.DEFAULT_DOCTOR_FEE) || 100;
+const AUTH_SERVICE_BASE_URL = process.env.AUTH_SERVICE_BASE_URL || 'http://localhost:5001/api';
 
+const defaultAvailability = [
+  { dayOfWeek: 'Monday', startTime: '09:00 AM', endTime: '05:00 PM' },
+  { dayOfWeek: 'Tuesday', startTime: '09:00 AM', endTime: '05:00 PM' },
+  { dayOfWeek: 'Wednesday', startTime: '09:00 AM', endTime: '05:00 PM' },
+  { dayOfWeek: 'Thursday', startTime: '09:00 AM', endTime: '05:00 PM' },
+  { dayOfWeek: 'Friday', startTime: '09:00 AM', endTime: '05:00 PM' }
+];
+
+const normalizeStringArray = (value) => {
+  if (!value) return [];
   if (Array.isArray(value)) {
     return value.map((item) => String(item).trim()).filter(Boolean);
   }
-
   return [String(value).trim()].filter(Boolean);
 };
 
 const buildDoctorPayload = (body) => ({
+  fullName: body.fullName,
   specialty: body.specialty,
   qualifications: normalizeStringArray(body.qualifications),
   medicalLicenseNumber: body.medicalLicenseNumber,
@@ -34,11 +43,25 @@ const buildDoctorPayload = (body) => ({
   availability: Array.isArray(body.availability) ? body.availability : []
 });
 
+const mapVerifiedUserToDoctor = (user) => ({
+  _id: `auth-${user.id}`,
+  userId: user.id,
+  fullName: user.fullName,
+  specialty: 'General Medicine',
+  qualifications: [],
+  yearsOfExperience: 0,
+  consultationFee: DEFAULT_CONSULTATION_FEE,
+  bio: 'Verified doctor account. Full profile details are pending completion.',
+  availability: defaultAvailability,
+  verificationStatus: 'approved',
+  isActive: true,
+  isFromAuthFallback: true
+});
+
 const handleWriteError = (error, res, fallbackMessage) => {
   if (error?.code === 11000) {
     const duplicateField = Object.keys(error.keyPattern || {})[0];
-    const fieldLabel = duplicateField === 'medicalLicenseNumber' ? 'medicalLicenseNumber' : duplicateField || 'field';
-
+    const fieldLabel = duplicateField || 'field';
     return res.status(409).json({
       success: false,
       message: `A doctor application with this ${fieldLabel} already exists`
@@ -54,22 +77,13 @@ const handleWriteError = (error, res, fallbackMessage) => {
 
 const getDoctorProfileByIdOrRespond = async (doctorId, res) => {
   if (!mongoose.Types.ObjectId.isValid(doctorId)) {
-    res.status(400).json({
-      success: false,
-      message: 'Invalid doctorId format'
-    });
-
+    res.status(400).json({ success: false, message: 'Invalid doctorId format' });
     return null;
   }
 
   const doctorProfile = await Doctor.findById(doctorId);
-
   if (!doctorProfile) {
-    res.status(404).json({
-      success: false,
-      message: 'Doctor application not found'
-    });
-
+    res.status(404).json({ success: false, message: 'Doctor profile not found' });
     return null;
   }
 
@@ -82,7 +96,6 @@ const ensurePendingReviewStatus = (doctorProfile, res, action) => {
       success: false,
       message: `Doctor application must be pending before it can be ${action}`
     });
-
     return false;
   }
 
@@ -112,10 +125,7 @@ const applyDoctorProfile = async (req, res) => {
       userId: req.user.id,
       ...buildDoctorPayload(req.body),
       verificationStatus: 'pending',
-      submittedAt: new Date(),
-      verificationNotes: undefined,
-      verifiedAt: undefined,
-      verifiedBy: undefined
+      submittedAt: new Date()
     });
 
     return res.status(201).json({
@@ -164,10 +174,10 @@ const updateMyDoctorProfile = async (req, res) => {
       });
     }
 
-    if (doctorProfile.verificationStatus !== 'pending') {
+    if (doctorProfile.verificationStatus === 'rejected') {
       return res.status(403).json({
         success: false,
-        message: 'Only pending doctor applications can be updated'
+        message: 'Rejected doctor applications cannot be updated'
       });
     }
 
@@ -187,10 +197,6 @@ const updateMyDoctorProfile = async (req, res) => {
       }
     });
 
-    doctorProfile.verificationNotes = undefined;
-    doctorProfile.verifiedAt = undefined;
-    doctorProfile.verifiedBy = undefined;
-
     await doctorProfile.save();
 
     return res.status(200).json({
@@ -203,20 +209,61 @@ const updateMyDoctorProfile = async (req, res) => {
   }
 };
 
-const getPendingDoctorApplications = async (req, res) => {
+const getPendingDoctorApplications = async (_req, res) => {
   try {
-    const applications = await Doctor.find({ verificationStatus: 'pending' }).sort({ submittedAt: 1, createdAt: 1 });
+    const applications = await Doctor.find({ verificationStatus: 'pending' }).sort({ submittedAt: 1 });
 
     return res.status(200).json({
       success: true,
-      message: 'Pending doctor applications retrieved successfully',
       count: applications.length,
       data: applications
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: 'Failed to fetch pending doctor applications',
+      message: 'Failed to fetch pending applications',
+      error: error.message
+    });
+  }
+};
+
+const getAllApprovedDoctors = async (req, res) => {
+  try {
+    const approvedDoctors = await Doctor.find({
+      verificationStatus: 'approved',
+      isActive: true
+    }).sort({ verifiedAt: -1 }).lean();
+
+    const doctorsByUserId = new Set(approvedDoctors.map((doctor) => String(doctor.userId)));
+
+    let verifiedUsers = [];
+    try {
+      const response = await axios.get(`${AUTH_SERVICE_BASE_URL}/auth/doctors/verified`, {
+        headers: {
+          Authorization: req.headers.authorization
+        }
+      });
+
+      verifiedUsers = Array.isArray(response?.data?.data) ? response.data.data : [];
+    } catch (_error) {
+      verifiedUsers = [];
+    }
+
+    const fallbackDoctors = verifiedUsers
+      .filter((user) => !doctorsByUserId.has(String(user.id)))
+      .map(mapVerifiedUserToDoctor);
+
+    const data = [...approvedDoctors, ...fallbackDoctors];
+
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      data
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch doctors',
       error: error.message
     });
   }
@@ -225,19 +272,13 @@ const getPendingDoctorApplications = async (req, res) => {
 const getDoctorApplicationById = async (req, res) => {
   try {
     const doctorProfile = await getDoctorProfileByIdOrRespond(req.params.doctorId, res);
-    if (!doctorProfile) {
-      return;
-    }
+    if (!doctorProfile) return;
 
-    return res.status(200).json({
-      success: true,
-      message: 'Doctor application retrieved successfully',
-      data: doctorProfile
-    });
+    return res.status(200).json({ success: true, data: doctorProfile });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: 'Failed to fetch doctor application',
+      message: 'Failed to fetch application',
       error: error.message
     });
   }
@@ -246,9 +287,7 @@ const getDoctorApplicationById = async (req, res) => {
 const approveDoctorApplication = async (req, res) => {
   try {
     const doctorProfile = await getDoctorProfileByIdOrRespond(req.params.doctorId, res);
-    if (!doctorProfile) {
-      return;
-    }
+    if (!doctorProfile) return;
 
     if (!ensurePendingReviewStatus(doctorProfile, res, 'approved')) {
       return;
@@ -263,13 +302,13 @@ const approveDoctorApplication = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Doctor application approved successfully',
+      message: 'Doctor application approved',
       data: doctorProfile
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: 'Failed to approve doctor application',
+      message: 'Failed to approve application',
       error: error.message
     });
   }
@@ -278,9 +317,7 @@ const approveDoctorApplication = async (req, res) => {
 const rejectDoctorApplication = async (req, res) => {
   try {
     const doctorProfile = await getDoctorProfileByIdOrRespond(req.params.doctorId, res);
-    if (!doctorProfile) {
-      return;
-    }
+    if (!doctorProfile) return;
 
     if (!ensurePendingReviewStatus(doctorProfile, res, 'rejected')) {
       return;
@@ -295,13 +332,127 @@ const rejectDoctorApplication = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'Doctor application rejected successfully',
+      message: 'Doctor application rejected',
       data: doctorProfile
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: 'Failed to reject doctor application',
+      message: 'Failed to reject application',
+      error: error.message
+    });
+  }
+};
+
+const getPatientReports = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const patientServiceURL = `http://localhost:5004/api/patients/reports/${patientId}`;
+
+    const config = {
+      headers: {
+        Authorization: req.headers.authorization
+      }
+    };
+
+    const response = await axios.get(patientServiceURL, config);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Patient reports fetched successfully',
+      data: response.data
+    });
+  } catch (error) {
+    if (error.response?.status === 404) {
+      return res.status(404).json({
+        success: false,
+        message: 'No reports found for this patient'
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: 'Error communicating with Patient Service',
+      error: error.message
+    });
+  }
+};
+
+const issuePrescription = async (req, res) => {
+  try {
+    const { patientId, prescriptionText } = req.body;
+
+    if (!patientId || !prescriptionText) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient ID and prescription text are required'
+      });
+    }
+
+    const doctor = await Doctor.findOneAndUpdate(
+      { userId: req.user.id, isActive: true, verificationStatus: 'approved' },
+      {
+        $push: {
+          digitalPrescriptions: {
+            patientId,
+            prescriptionText
+          }
+        }
+      },
+      {
+        new: true,
+        runValidators: true
+      }
+    );
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Approved/Active doctor profile not found'
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Prescription issued successfully',
+      data: doctor.digitalPrescriptions
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Server Error',
+      error: error.message
+    });
+  }
+};
+
+const disableDoctorProfile = async (req, res) => {
+  try {
+    const doctor = await Doctor.findOneAndUpdate(
+      { userId: req.user.id },
+      {
+        isActive: false,
+        availability: []
+      },
+      { new: true }
+    );
+
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'Doctor not found'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Doctor profile disabled successfully',
+      data: doctor
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Server Error',
       error: error.message
     });
   }
@@ -312,7 +463,11 @@ module.exports = {
   getMyDoctorProfile,
   updateMyDoctorProfile,
   getPendingDoctorApplications,
+  getAllApprovedDoctors,
   getDoctorApplicationById,
   approveDoctorApplication,
-  rejectDoctorApplication
+  rejectDoctorApplication,
+  getPatientReports,
+  issuePrescription,
+  disableDoctorProfile
 };

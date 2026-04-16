@@ -7,6 +7,8 @@ const appointmentSchema = new mongoose.Schema(
       required: true,
       trim: true
     },
+    patientName: { type: String, trim: true },
+    doctorName: { type: String, trim: true },
     doctorId: {
       type: String,
       required: true,

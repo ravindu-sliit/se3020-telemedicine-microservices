@@ -1,8 +1,8 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
-import { loginUser, registerUser } from '../services/api';
-import { saveSession } from '../services/session';
+import { loginUser, registerUser, registerDoctor } from '../services/api';
+import { saveSession, clearSession } from '../services/session';
 
 const initialLoginState = {
   email: '',
@@ -45,8 +45,16 @@ const Auth = () => {
       token: payload.data.token,
       user: payload.data.user
     });
-    navigate('/patient');
+    const role = payload.data.user?.role;
+    if (role === 'admin') {
+      navigate('/admin');
+    } else if (role === 'doctor') {
+      navigate('/doctor');
+    } else {
+      navigate('/patient');
+    }
   };
+
 
   const handleLoginSubmit = async (event) => {
     event.preventDefault();
@@ -55,6 +63,11 @@ const Auth = () => {
 
     try {
       const response = await loginUser(loginForm);
+      if (response.data.user?.role === 'doctor' && !response.data.user?.isVerified) {
+        clearSession();
+        setErrorMessage('Your doctor account is pending admin approval. You cannot login yet.');
+        return;
+      }
       completeAuth(response);
     } catch (error) {
       setErrorMessage(error.message);
@@ -69,8 +82,16 @@ const Auth = () => {
     setErrorMessage('');
 
     try {
-      const response = await registerUser(registerForm);
-      completeAuth(response);
+      if (registerForm.role === 'doctor') {
+        await registerDoctor(registerForm);
+        setErrorMessage('Registration successful! Please wait for admin approval before logging in.');
+        setMode('login');
+        setLoginForm({ email: registerForm.email, password: registerForm.password });
+        setRegisterForm(initialRegisterState);
+      } else {
+        const response = await registerUser(registerForm);
+        completeAuth(response);
+      }
     } catch (error) {
       setErrorMessage(error.message);
     } finally {
@@ -113,20 +134,20 @@ const Auth = () => {
                     marginBottom: 20
                   }}
                 >
-                  Connected to Live Services
+                  Secure &amp; Trusted Platform
                 </span>
                 <h1 style={{ fontSize: '2.6rem', lineHeight: 1.05, fontWeight: 900, marginBottom: 16 }}>
-                  One sign-in flow for auth and patient care
+                  Your health journey starts here
                 </h1>
                 <p style={{ color: 'rgba(255,255,255,0.82)', fontSize: '1rem', lineHeight: 1.7, marginBottom: 26 }}>
-                  Create an account through `auth-service`, then manage your patient profile through `patient-service`
-                  using the same secure token.
+                  Sign in to access your personalised dashboard. Doctors go to the doctor dashboard,
+                  patients to the patient portal, and admins to the admin panel.
                 </p>
                 <div style={{ display: 'grid', gap: 14 }}>
                   {[
-                    'Register or sign in with auth-service',
-                    'Store your JWT session in the frontend',
-                    'Create and update your patient profile from the dashboard'
+                    '✦  Book appointments with certified doctors',
+                    '✦  Manage your medical records securely',
+                    '✦  AI-powered symptom checking'
                   ].map((item) => (
                     <div
                       key={item}
@@ -165,21 +186,21 @@ const Auth = () => {
 
               <div style={{ marginBottom: 24 }}>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: 8 }}>
-                  {isLoginMode ? 'Welcome back' : 'Create your patient account'}
+                  {isLoginMode ? 'Welcome back 👋' : 'Create your account'}
                 </h2>
                 <p style={{ color: 'var(--gray-500)', marginBottom: 0 }}>
                   {isLoginMode
-                    ? 'Use your auth-service credentials to continue into the dashboard.'
-                    : 'New accounts are created in auth-service and redirected into the patient portal.'}
+                    ? 'Sign in to continue. You\'ll be redirected to your dashboard based on your role.'
+                    : 'Register as a patient to book appointments and manage your health records.'}
                 </p>
               </div>
 
               {errorMessage ? (
                 <div
                   style={{
-                    background: '#fef2f2',
-                    color: '#b91c1c',
-                    border: '1px solid #fecaca',
+                    background: errorMessage.includes('successful') ? '#f0fdf4' : '#fef2f2',
+                    color: errorMessage.includes('successful') ? '#166534' : '#b91c1c',
+                    border: `1px solid ${errorMessage.includes('successful') ? '#bbf7d0' : '#fecaca'}`,
                     borderRadius: 14,
                     padding: '12px 14px',
                     marginBottom: 18,
@@ -269,13 +290,10 @@ const Auth = () => {
                         name="role"
                         value={registerForm.role}
                         onChange={handleRegisterChange}
-                        disabled
                       >
                         <option value="patient">Patient</option>
+                        <option value="doctor">Doctor</option>
                       </select>
-                      <div style={{ marginTop: 6, fontSize: '0.75rem', color: 'var(--gray-500)' }}>
-                        Public sign-up creates patient accounts only.
-                      </div>
                     </label>
                     <button className="btn btn-primary btn-lg" type="submit" disabled={isSubmitting}>
                       {isSubmitting ? 'Creating Account...' : 'Create Account'}

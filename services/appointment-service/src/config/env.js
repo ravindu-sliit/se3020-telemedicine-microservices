@@ -11,7 +11,7 @@ requiredEnvVars.forEach((envVar) => {
 });
 
 const env = {
-  port: Number(process.env.PORT) || 5004,
+  port: Number(process.env.PORT) || 5003,
   mongodbUri: process.env.MONGODB_URI,
   jwtSecret: process.env.JWT_SECRET
 };
