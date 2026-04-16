@@ -14,6 +14,7 @@ import Admin from './pages/Admin';
 import BookAppointment from './pages/BookAppointment';
 import TelemedicineRoom from './pages/TelemedicineRoom';
 import SymptomChecker from './pages/SymptomChecker';
+import { PaymentSuccess, PaymentCancel } from './pages/PaymentStatus';
 
 const roleHomePath = (role) => {
   if (role === 'admin') return '/admin';
@@ -66,6 +67,14 @@ function App() {
           <Route
             path="/patient/book-appointment"
             element={<RoleProtectedRoute allowedRoles={['patient']} element={<BookAppointment />} />}
+          />
+          <Route
+            path="/payments/success"
+            element={<PaymentSuccess />}
+          />
+          <Route
+            path="/payments/cancel"
+            element={<PaymentCancel />}
           />
           
           {/* Doctor Routes */}

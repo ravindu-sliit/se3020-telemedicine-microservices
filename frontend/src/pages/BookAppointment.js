@@ -7,7 +7,7 @@ import {
 } from '@heroicons/react/24/outline';
 import Navbar from '../components/Navbar';
 import { getSession } from '../services/session';
-import { fetchAllDoctors, createAppointment } from '../services/api';
+import { fetchAllDoctors, createAppointment, createCheckoutSession } from '../services/api';
 
 const getDoctorDisplayName = (doctor) => doctor?.userId?.fullName || doctor?.fullName || doctor?.name || 'Doctor';
 const getDoctorSpecialty = (doctor) => doctor?.specialty || 'General Medicine';
@@ -25,6 +25,10 @@ const BookAppointment = () => {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [currentStep, setCurrentStep] = useState(1);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('card');
+  const [bookingInProgress, setBookingInProgress] = useState(false);
+  const [bookingError, setBookingError] = useState('');
+  const [lastAppointment, setLastAppointment] = useState(null);
 
   const [doctors, setDoctors] = useState([]);
   const [doctorsLoading, setDoctorsLoading] = useState(true);
@@ -130,6 +134,54 @@ const BookAppointment = () => {
     { num: 3, label: 'Payment' },
     { num: 4, label: 'Confirmation' }
   ];
+
+  const handleCompleteBooking = async () => {
+    if (!selectedDoctor) return;
+
+    setBookingInProgress(true);
+    setBookingError('');
+
+    try {
+      const appointmentResponse = await createAppointment({
+        doctorId: selectedDoctor.userId?._id || selectedDoctor.userId || selectedDoctor._id,
+        doctorName: getDoctorDisplayName(selectedDoctor),
+        patientName: session?.user?.fullName || 'Patient',
+        appointmentDate: selectedDate,
+        timeSlot: selectedTime,
+        reason: 'Consultation'
+      });
+
+      const appointmentId = appointmentResponse?.data?._id || appointmentResponse?.data?.id;
+      const totalAmount = getDoctorFee(selectedDoctor) + 5;
+
+      let checkoutUrl = '';
+      if (appointmentId) {
+        const paymentResponse = await createCheckoutSession({
+          appointmentId,
+          amount: totalAmount,
+          currency: 'usd',
+          patientEmail: session?.user?.email || ''
+        });
+        checkoutUrl = paymentResponse?.checkoutUrl || '';
+      }
+
+      setLastAppointment({
+        id: appointmentId,
+        checkoutUrl
+      });
+
+      if (checkoutUrl) {
+        window.location.assign(checkoutUrl);
+        return;
+      }
+
+      setCurrentStep(4);
+    } catch (error) {
+      setBookingError(error.message || 'Failed to complete booking workflow.');
+    } finally {
+      setBookingInProgress(false);
+    }
+  };
 
   const filteredDoctors = useMemo(() => {
     if (!suggestedSpecialty) return doctors;
@@ -317,13 +369,25 @@ const BookAppointment = () => {
                   display: 'flex', alignItems: 'center', padding: '12px 16px', borderRadius: 14,
                   border: '2px solid var(--gray-100)', cursor: 'pointer', transition: 'all 0.2s ease', gap: 12
                 }}>
-                  <input type="radio" name="payment" value={m.id} style={{ accentColor: 'var(--primary-600)' }} />
+                  <input
+                    type="radio"
+                    name="payment"
+                    value={m.id}
+                    checked={selectedPaymentMethod === m.id}
+                    onChange={(event) => setSelectedPaymentMethod(event.target.value)}
+                    style={{ accentColor: 'var(--primary-600)' }}
+                  />
                   <Icon style={{ width: 22, height: 22, color: 'var(--primary-600)' }} />
                   <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{m.name}</span>
                 </label>
               );
             })}
           </div>
+          {bookingError && (
+            <div style={{ marginTop: 14, color: '#b91c1c', fontSize: '0.85rem' }}>
+              {bookingError}
+            </div>
+          )}
           <div style={{ marginTop: 20 }}>
             <div className="form-group"><label className="form-label">Card Number</label><input type="text" placeholder="1234 5678 9012 3456" className="form-input" /></div>
             <div className="grid grid-cols-2 gap-4">
@@ -335,21 +399,13 @@ const BookAppointment = () => {
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 28 }}>
         <button onClick={() => setCurrentStep(2)} className="btn btn-secondary"><ArrowLeftIcon style={{ width: 16, height: 16 }} /> Back</button>
-        <button onClick={async () => {
-          try {
-            await createAppointment({
-              doctorId: selectedDoctor.userId?._id || selectedDoctor.userId || selectedDoctor._id,
-              doctorName: getDoctorDisplayName(selectedDoctor),
-              patientName: session?.user?.fullName || 'Patient',
-              appointmentDate: selectedDate,
-              timeSlot: selectedTime,
-              reason: 'Consultation'
-            });
-            setCurrentStep(4);
-          } catch (e) {
-            alert('Failed to book appointment: ' + e.message);
-          }
-        }} disabled={!selectedDoctor || !(selectedDoctor.userId?._id || selectedDoctor.userId || selectedDoctor._id)} className="btn btn-primary">Complete Payment <ArrowRightIcon style={{ width: 16, height: 16 }} /></button>
+        <button
+          onClick={handleCompleteBooking}
+          disabled={bookingInProgress || !selectedDoctor || !(selectedDoctor.userId?._id || selectedDoctor.userId || selectedDoctor._id)}
+          className="btn btn-primary"
+        >
+          {bookingInProgress ? 'Processing...' : 'Complete Payment'} <ArrowRightIcon style={{ width: 16, height: 16 }} />
+        </button>
       </div>
     </div>
   );
@@ -363,8 +419,8 @@ const BookAppointment = () => {
         }}>
           <CheckCircleIcon style={{ width: 36, height: 36, color: 'var(--success-600)' }} />
         </div>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: 8 }}>Appointment Confirmed!</h1>
-        <p style={{ color: 'var(--gray-500)', marginBottom: 32, fontSize: '0.95rem' }}>Your appointment has been successfully booked.</p>
+        <h1 style={{ fontSize: '1.75rem', fontWeight: 800, marginBottom: 8 }}>Appointment Created</h1>
+        <p style={{ color: 'var(--gray-500)', marginBottom: 32, fontSize: '0.95rem' }}>Your appointment request is saved. Complete payment to confirm it.</p>
         <div style={{ background: 'var(--gray-50)', borderRadius: 16, padding: 24, marginBottom: 28, textAlign: 'left' }}>
           <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 16, textAlign: 'center' }}>Details</h3>
           <div className="grid grid-cols-2 gap-4">
@@ -372,7 +428,8 @@ const BookAppointment = () => {
               ['Doctor', getDoctorDisplayName(selectedDoctor)], ['Specialty', getDoctorSpecialty(selectedDoctor)],
               ['Date', selectedDate], ['Time', selectedTime],
               ['Fee', '$' + getDoctorFee(selectedDoctor)],
-              ['Confirmation', 'APT-' + Math.random().toString(36).substr(2, 9).toUpperCase()]
+              ['Payment Method', selectedPaymentMethod],
+              ['Confirmation', lastAppointment?.id || ('APT-' + Math.random().toString(36).substr(2, 9).toUpperCase())]
             ].map(([l, v]) => (
               <div key={l}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--gray-400)', fontWeight: 600, textTransform: 'uppercase', marginBottom: 2 }}>{l}</div>
@@ -381,6 +438,13 @@ const BookAppointment = () => {
             ))}
           </div>
         </div>
+        {lastAppointment?.checkoutUrl && (
+          <div style={{ marginBottom: 20 }}>
+            <a href={lastAppointment.checkoutUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary w-full">
+              Continue to Payment
+            </a>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-4" style={{ marginBottom: 20 }}>
           <Link to="/patient" className="btn btn-secondary">Go to Dashboard</Link>
           <Link to="/telemedicine-room" className="btn btn-primary">Join Video Call</Link>

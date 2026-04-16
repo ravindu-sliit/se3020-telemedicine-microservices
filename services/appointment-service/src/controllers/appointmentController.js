@@ -1,5 +1,5 @@
 const Appointment = require('../models/Appointment');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 
 // @desc    Create a new appointment request
 // @route   POST /api/appointments
@@ -52,7 +52,7 @@ const updateAppointmentStatus = async (req, res) => {
 
         // If the doctor confirms the appointment, generate the full Jitsi Meeting URL
         if (status === 'Confirmed') {
-            updateData.videoMeetingUrl = `https://meet.jit.si/Consultation-${appointmentId}-${uuidv4()}`;
+            updateData.videoMeetingUrl = `https://meet.jit.si/Consultation-${appointmentId}-${randomUUID()}`;
         }
 
         const appointment = await Appointment.findByIdAndUpdate(

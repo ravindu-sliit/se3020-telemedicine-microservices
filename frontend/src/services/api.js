@@ -174,13 +174,25 @@ export const checkSymptoms = async (symptoms) => {
   return parseResponse(response);
 };
 
-export const createCheckoutSession = async ({ appointmentId, amount, currency = 'usd' }) => {
+export const createCheckoutSession = async ({ appointmentId, amount, currency = 'usd', patientEmail }) => {
   const response = await fetch(`${PAYMENT_BASE_URL}/payments/checkout`, {
     method: 'POST',
     headers: buildHeaders({
       'Content-Type': 'application/json'
     }),
-    body: JSON.stringify({ appointmentId, amount, currency })
+    body: JSON.stringify({ appointmentId, amount, currency, patientEmail })
+  });
+
+  return parseResponse(response);
+};
+
+export const confirmCheckoutSession = async (sessionId) => {
+  const response = await fetch(`${PAYMENT_BASE_URL}/payments/confirm`, {
+    method: 'POST',
+    headers: buildHeaders({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify({ sessionId })
   });
 
   return parseResponse(response);

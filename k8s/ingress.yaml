@@ -22,6 +22,13 @@ spec:
                 name: doctor-service
                 port:
                   number: 5003
+          - path: /api/appointments
+            pathType: Prefix
+            backend:
+              service:
+                name: appointment-service
+                port:
+                  number: 5003
           - path: /api/patients
             pathType: Prefix
             backend:

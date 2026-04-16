@@ -29,8 +29,10 @@ spec:
             - name: PAYMENT_MOCK_ONLY
               value: "false"
             - name: FRONTEND_BASE_URL
-              value: "http://localhost:3000"
+              value: "http://smart-healthcare.local"
             - name: PAYMENT_SUCCESS_URL
-              value: "http://localhost:3000/payments/success?session_id={CHECKOUT_SESSION_ID}"
+              value: "http://smart-healthcare.local/payments/success?session_id={CHECKOUT_SESSION_ID}"
             - name: PAYMENT_CANCEL_URL
-              value: "http://localhost:3000/payments/cancel"
+              value: "http://smart-healthcare.local/payments/cancel"
+            - name: NOTIFICATION_API_URL
+              value: "http://notification-service:5007/api/notifications/send"

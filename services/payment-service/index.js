@@ -5,6 +5,8 @@ const Stripe = require('stripe');
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5006;
+const NOTIFICATION_API_URL =
+  process.env.NOTIFICATION_API_URL || 'http://notification-service:5007/api/notifications/send';
 
 app.use(express.json());
 app.use(cors());
@@ -22,7 +24,7 @@ app.get('/api/health', (_req, res) => {
 
 app.post('/api/payments/checkout', async (req, res) => {
   try {
-    const { appointmentId, amount, currency = 'usd' } = req.body;
+    const { appointmentId, amount, currency = 'usd', patientEmail } = req.body;
 
     if (!appointmentId || amount === undefined || amount === null) {
       return res.status(400).json({
@@ -67,8 +69,10 @@ app.post('/api/payments/checkout', async (req, res) => {
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: {
-        appointmentId
+        appointmentId,
+        patientEmail: patientEmail || ''
       },
+      ...(patientEmail ? { customer_email: patientEmail } : {}),
       line_items: [
         {
           quantity: 1,
@@ -109,6 +113,87 @@ app.post('/api/payments/checkout', async (req, res) => {
 
     return res.status(statusCode).json({
       error: 'Failed to create checkout session.',
+      debug: {
+        message: error?.message,
+        type: error?.type,
+        code: error?.code
+      }
+    });
+  }
+});
+
+app.post('/api/payments/confirm', async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: 'sessionId is required.' });
+    }
+
+    if (!stripe) {
+      return res.status(400).json({ error: 'Stripe is not configured.' });
+    }
+
+    const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
+    const isPaid = checkoutSession?.payment_status === 'paid';
+
+    if (!isPaid) {
+      return res.status(400).json({
+        success: false,
+        paid: false,
+        message: 'Payment is not completed yet.'
+      });
+    }
+
+    const recipientEmail =
+      checkoutSession?.customer_details?.email ||
+      checkoutSession?.customer_email ||
+      checkoutSession?.metadata?.patientEmail ||
+      '';
+
+    if (!recipientEmail) {
+      return res.status(200).json({
+        success: true,
+        paid: true,
+        notified: false,
+        message: 'Payment confirmed, but no recipient email found.'
+      });
+    }
+
+    const notificationResponse = await fetch(NOTIFICATION_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        patientEmail: recipientEmail,
+        message: `Payment completed successfully for appointment ${checkoutSession?.metadata?.appointmentId || 'N/A'}.`
+      })
+    });
+
+    const notificationPayload = await notificationResponse.json().catch(() => ({}));
+
+    return res.status(200).json({
+      success: true,
+      paid: true,
+      notified: notificationResponse.ok,
+      recipientEmail,
+      notification: notificationPayload
+    });
+  } catch (error) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    console.error('Payment confirmation error:', {
+      message: error?.message,
+      type: error?.type,
+      code: error?.code
+    });
+
+    if (isProduction) {
+      return res.status(500).json({ error: 'Failed to confirm payment session.' });
+    }
+
+    return res.status(500).json({
+      error: 'Failed to confirm payment session.',
       debug: {
         message: error?.message,
         type: error?.type,

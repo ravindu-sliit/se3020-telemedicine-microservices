@@ -92,7 +92,9 @@ Create files from templates:
 Copy-Item .\k8s\auth-secret.example.yaml .\k8s\auth-secret.yaml
 Copy-Item .\k8s\patient-secret.example.yaml .\k8s\patient-secret.yaml
 Copy-Item .\k8s\doctor-secret.example.yaml .\k8s\doctor-secret.yaml
+Copy-Item .\k8s\appointment-secret.example.yaml .\k8s\appointment-secret.yaml
 Copy-Item .\k8s\payment-secret.example.yaml .\k8s\payment-secret.yaml
+Copy-Item .\k8s\notification-secret.example.yaml .\k8s\notification-secret.yaml
 ```
 
 Fill real values, then apply:
@@ -101,8 +103,38 @@ Fill real values, then apply:
 kubectl apply -f .\k8s\auth-secret.yaml
 kubectl apply -f .\k8s\patient-secret.yaml
 kubectl apply -f .\k8s\doctor-secret.yaml
+kubectl apply -f .\k8s\appointment-secret.yaml
 kubectl apply -f .\k8s\payment-secret.yaml
+kubectl apply -f .\k8s\notification-secret.yaml
 ```
+
+Recommended for team onboarding (single command):
+
+1. Set required env vars in your local terminal session:
+
+```powershell
+$env:AUTH_MONGODB_URI="<auth mongodb uri>"
+$env:PATIENT_MONGODB_URI="<patient mongodb uri>"
+$env:DOCTOR_MONGO_URI="<doctor mongodb uri>"
+$env:APPOINTMENT_MONGODB_URI="<appointment mongodb uri>"
+$env:JWT_SECRET="<shared jwt secret>"
+$env:STRIPE_SECRET_KEY="<stripe secret key>"
+$env:EMAIL_USER="<sender email>"
+$env:EMAIL_APP_PASSWORD="<email app password>"
+# Optional:
+$env:JWT_EXPIRES_IN="7d"
+$env:EMAIL_PROVIDER="auto"
+$env:EMAIL_FROM="<sender email>"
+$env:SENDGRID_API_KEY="<sendgrid key>"
+```
+
+2. Run:
+
+```powershell
+.\scripts\apply-k8s-secrets.ps1
+```
+
+This keeps real secrets out of tracked YAML files while allowing every developer to deploy quickly.
 
 ### 3.4 Apply manifests
 
@@ -175,7 +207,9 @@ Artifacts:
 - `k8s/doctor-secret.example.yaml`
 - `k8s/doctor-secret.yaml`
 - `k8s/patient-secret.example.yaml`
+- `k8s/appointment-secret.example.yaml`
 - `k8s/payment-secret.example.yaml`
+- `k8s/notification-secret.example.yaml`
 
 ## 6. Security Notes
 

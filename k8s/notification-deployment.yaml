@@ -17,11 +17,37 @@ spec:
       containers:
         - name: notification-service
           image: notification-service-image:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           ports:
             - containerPort: 5007
           env:
+            - name: NODE_OPTIONS
+              value: "--dns-result-order=ipv4first"
+            - name: EMAIL_PROVIDER
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secrets
+                  key: EMAIL_PROVIDER
+                  optional: true
+            - name: EMAIL_FROM
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secrets
+                  key: EMAIL_FROM
+                  optional: true
+            - name: SENDGRID_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secrets
+                  key: SENDGRID_API_KEY
+                  optional: true
             - name: EMAIL_USER
-              value: "webstorebs@gmail.com"
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secrets
+                  key: EMAIL_USER
             - name: EMAIL_APP_PASSWORD
-              value: "xoyx xfiu xetd ofzs"
+              valueFrom:
+                secretKeyRef:
+                  name: notification-service-secrets
+                  key: EMAIL_APP_PASSWORD
