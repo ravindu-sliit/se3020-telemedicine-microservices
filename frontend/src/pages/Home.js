@@ -1,50 +1,234 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { 
+import {
   CalendarIcon, UserGroupIcon, DocumentTextIcon, CogIcon,
-  ClipboardDocumentListIcon, UserCircleIcon, StarIcon,
-  ArrowRightIcon, HeartIcon
+  VideoCameraIcon
 } from '@heroicons/react/24/outline';
-import { FaUserMd, FaUserShield } from 'react-icons/fa';
 import Navbar from '../components/Navbar';
+import { fetchPatientAppointments } from '../services/api';
+import { getSession } from '../services/session';
+
+const parseAppointmentDateTime = (appointment) => {
+  if (!appointment?.appointmentDate) {
+    return null;
+  }
+
+  const date = new Date(appointment.appointmentDate);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const value = String(appointment.timeSlot || '').trim().toUpperCase();
+  if (!value) {
+    return date;
+  }
+
+  const twelveHourMatch = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  if (twelveHourMatch) {
+    let hours = Number(twelveHourMatch[1]);
+    const minutes = Number(twelveHourMatch[2]);
+    const period = twelveHourMatch[3];
+
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+  }
+
+  const twentyFourHourMatch = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourHourMatch) {
+    const hours = Number(twentyFourHourMatch[1]);
+    const minutes = Number(twentyFourHourMatch[2]);
+    if (hours <= 23 && minutes <= 59) {
+      date.setHours(hours, minutes, 0, 0);
+    }
+    return date;
+  }
+
+  return date;
+};
+
+const sortByDateAsc = (a, b) => {
+  const first = parseAppointmentDateTime(a)?.getTime() || 0;
+  const second = parseAppointmentDateTime(b)?.getTime() || 0;
+  return first - second;
+};
+
+const sortByDateDesc = (a, b) => sortByDateAsc(b, a);
+
+const getStatusClass = (status) => {
+  const normalized = String(status || '').toLowerCase();
+
+  if (normalized === 'confirmed' || normalized === 'completed') {
+    return 'status-confirmed';
+  }
+
+  if (normalized === 'pending') {
+    return 'status-pending';
+  }
+
+  return 'status-inactive';
+};
 
 const Home = () => {
-  const userRole = localStorage.getItem('userRole') || 'patient';
+  const session = getSession();
+  const [appointments, setAppointments] = useState([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [appointmentsError, setAppointmentsError] = useState('');
 
-  const roles = [
-    { id: 'doctor', label: 'Doctor', icon: FaUserMd, color: '#4f46e5', bg: 'linear-gradient(135deg, #eef2ff, #e0e7ff)', desc: 'Manage patients and schedules', path: '/doctor' },
-    { id: 'admin', label: 'Admin', icon: FaUserShield, color: '#dc2626', bg: 'linear-gradient(135deg, #fef2f2, #fee2e2)', desc: 'Oversee platform operations', path: '/admin' },
+  const features = [
+    { title: 'Book Appointment', description: 'Schedule consultations with healthcare professionals', icon: CalendarIcon, path: '/patient/book-appointment' },
+    { title: 'AI Symptom Checker', description: 'Get preliminary health assessments instantly', icon: CogIcon, path: '/patient/symptom-checker' },
+    { title: 'Medical Records', description: 'View and manage your health profile', icon: DocumentTextIcon, path: '/patient/profile' },
+    { title: 'Find Doctors', description: 'Search and filter doctors by specialty', icon: UserGroupIcon, path: '/patient/book-appointment' },
   ];
 
-  const features = {
-    patient: [
-      { title: 'Book Appointment', description: 'Schedule consultations with healthcare professionals', icon: CalendarIcon },
-      { title: 'Medical Records', description: 'View and manage your medical history', icon: DocumentTextIcon },
-      { title: 'Find Doctors', description: 'Search and filter doctors by specialty', icon: UserGroupIcon },
-      { title: 'AI Symptom Checker', description: 'Get preliminary health assessments', icon: CogIcon, path: '/patient/symptom-checker' }
-    ],
-    doctor: [
-      { title: 'My Schedule', description: 'Manage your appointment calendar', icon: CalendarIcon },
-      { title: 'Patient Queue', description: 'View upcoming patient consultations', icon: UserGroupIcon },
-      { title: 'Prescriptions', description: 'Issue digital prescriptions', icon: ClipboardDocumentListIcon },
-      { title: 'Profile Settings', description: 'Update your professional information', icon: UserCircleIcon }
-    ],
-    admin: [
-      { title: 'User Management', description: 'Manage patient and doctor accounts', icon: UserGroupIcon },
-      { title: 'Doctor Verification', description: 'Review and approve doctor registrations', icon: DocumentTextIcon },
-      { title: 'Platform Analytics', description: 'Monitor platform usage and statistics', icon: CogIcon },
-      { title: 'System Settings', description: 'Configure platform parameters', icon: CogIcon }
-    ]
+  useEffect(() => {
+    const loadAppointments = async () => {
+      if (!session?.token || session?.user?.role !== 'patient') {
+        setAppointments([]);
+        setAppointmentsLoading(false);
+        return;
+      }
+
+      try {
+        setAppointmentsLoading(true);
+        setAppointmentsError('');
+        const response = await fetchPatientAppointments();
+        setAppointments(Array.isArray(response?.data) ? response.data : []);
+      } catch (error) {
+        setAppointments([]);
+        setAppointmentsError(error.message || 'Failed to load appointments.');
+      } finally {
+        setAppointmentsLoading(false);
+      }
+    };
+
+    loadAppointments();
+  }, [session?.token, session?.user?.role]);
+
+  const categorizedAppointments = useMemo(() => {
+    const upcoming = [];
+    const ongoing = [];
+    const ended = [];
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    appointments.forEach((appointment) => {
+      const status = String(appointment.status || '').toLowerCase();
+      const appointmentDate = parseAppointmentDateTime(appointment);
+      const appointmentDay = appointmentDate
+        ? new Date(
+            appointmentDate.getFullYear(),
+            appointmentDate.getMonth(),
+            appointmentDate.getDate()
+          )
+        : null;
+
+      const isToday = appointmentDay && appointmentDay.getTime() === todayStart.getTime();
+      const isPast = appointmentDate ? appointmentDate.getTime() < now.getTime() : false;
+
+      if (status === 'completed' || status === 'cancelled') {
+        ended.push(appointment);
+        return;
+      }
+
+      if (status === 'confirmed' && (isToday || isPast)) {
+        ongoing.push(appointment);
+        return;
+      }
+
+      if (status === 'pending' || status === 'confirmed') {
+        if (isPast) {
+          ended.push(appointment);
+        } else {
+          upcoming.push(appointment);
+        }
+        return;
+      }
+
+      ended.push(appointment);
+    });
+
+    return {
+      upcoming: [...upcoming].sort(sortByDateAsc),
+      ongoing: [...ongoing].sort(sortByDateAsc),
+      ended: [...ended].sort(sortByDateDesc)
+    };
+  }, [appointments]);
+
+  const formatDate = (appointment) => {
+    const appointmentDate = parseAppointmentDateTime(appointment);
+    if (!appointmentDate) {
+      return 'Date not available';
+    }
+
+    return appointmentDate.toLocaleString();
   };
 
-  const currentFeatures = features[userRole] || features.patient;
+  const handleJoinMeeting = (appointment) => {
+    if (appointment?.videoMeetingUrl) {
+      window.open(appointment.videoMeetingUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
 
-  const stats = [
-    { value: '1,234', label: 'Active Patients', color: '#4f46e5', bg: '#eef2ff' },
-    { value: '456', label: 'Verified Doctors', color: '#10b981', bg: '#ecfdf5' },
-    { value: '5,678', label: 'Consultations', color: '#0ea5e9', bg: '#f0f9ff' },
-    { value: '98%', label: 'Satisfaction', color: '#f59e0b', bg: '#fffbeb' },
-  ];
+  const renderAppointmentList = (items, section) => {
+    if (appointmentsLoading) {
+      return <div className="loading-state">Loading appointments...</div>;
+    }
+
+    if (appointmentsError) {
+      return <div className="error-state">{appointmentsError}</div>;
+    }
+
+    if (!session?.token || session?.user?.role !== 'patient') {
+      return <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>Sign in as a patient to view appointment details.</div>;
+    }
+
+    if (items.length === 0) {
+      return <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No appointments in this section.</div>;
+    }
+
+    return (
+      <div style={{ display: 'grid', gap: 12 }}>
+        {items.map((appointment, index) => {
+          const doctorName = appointment.doctorName || appointment.doctorId || 'Doctor';
+          const canJoin = section !== 'ended' && Boolean(appointment.videoMeetingUrl);
+
+          return (
+            <div key={appointment._id || index} className="item-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.92rem', color: 'var(--gray-900)' }}>{doctorName}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>{formatDate(appointment)}</div>
+                </div>
+                <span className={`status ${getStatusClass(appointment.status)}`}>{appointment.status || 'Unknown'}</span>
+              </div>
+
+              <div style={{ fontSize: '0.82rem', color: 'var(--gray-600)', marginBottom: 10 }}>
+                Reason: {appointment.reason || 'Consultation'}
+              </div>
+
+              {section !== 'ended' && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handleJoinMeeting(appointment)}
+                  disabled={!canJoin}
+                  style={{ alignSelf: 'flex-end' }}
+                >
+                  <VideoCameraIcon style={{ width: 16, height: 16 }} />
+                  {canJoin ? 'Join Live Meeting' : 'Join (Available After Confirmation)'}
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="page-wrapper">
@@ -63,52 +247,8 @@ const Home = () => {
                 Welcome to MediConnect
               </h1>
               <p style={{ color: 'rgba(255,255,255,0.8)', marginBottom: 24, fontSize: '1rem' }}>
-                Select your role to get started with the platform
+                Your all-in-one platform for modern telehealth
               </p>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8,
-                background: 'rgba(255,255,255,0.15)', padding: '6px 16px',
-                borderRadius: 999, fontSize: '0.85rem', color: 'white', fontWeight: 500,
-                border: '1px solid rgba(255,255,255,0.2)'
-              }}>
-                Current role: <strong style={{ textTransform: 'capitalize' }}>{userRole}</strong>
-              </div>
-            </div>
-          </div>
-
-          {/* Role Selection */}
-          <div style={{ marginBottom: 48 }}>
-            <h2 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: 20 }}>Portals</h2>
-            <div className="grid grid-cols-2 gap-6">
-              {roles.map((role, i) => {
-                const Icon = role.icon;
-                return (
-                  <div key={role.id} className="animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s` }}>
-                    <div
-                      style={{
-                        background: 'white', borderRadius: 20, padding: 28, cursor: 'default',
-                        border: '2px solid var(--gray-100)',
-                        boxShadow: 'var(--shadow-sm)',
-                        transition: 'all 0.3s ease', position: 'relative', overflow: 'hidden'
-                      }}
-                    >
-                      <div style={{
-                        width: 52, height: 52, borderRadius: 14, background: role.bg,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16
-                      }}>
-                        <Icon style={{ fontSize: 22, color: role.color }} />
-                      </div>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 4 }}>{role.label}</h3>
-                      <p style={{ fontSize: '0.85rem', color: 'var(--gray-500)', marginBottom: 16 }}>{role.desc}</p>
-                      <Link to={role.path} style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 6,
-                        fontSize: '0.85rem', fontWeight: 600, color: role.color, textDecoration: 'none'
-                      }}>
-                        Go to Dashboard <ArrowRightIcon style={{ width: 16, height: 16 }} />
-                      </Link>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
 
@@ -116,59 +256,47 @@ const Home = () => {
           <div style={{ marginBottom: 48 }}>
             <h2 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: 20 }}>Quick Actions</h2>
             <div className="grid grid-cols-4 gap-5">
-              {currentFeatures.map((feature, index) => {
+              {features.map((feature, index) => {
                 const Icon = feature.icon;
-                const CardBody = (
-                  <div className="card animate-fade-in-up" style={{
-                    textAlign: 'center', padding: 24, cursor: feature.path ? 'pointer' : 'default',
-                    animationDelay: `${index * 0.08}s`
-                  }}>
-                    <div style={{
-                      width: 48, height: 48, borderRadius: 14,
-                      background: 'var(--primary-50)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      margin: '0 auto 12px'
-                    }}>
-                      <Icon style={{ width: 22, height: 22, color: 'var(--primary-600)' }} />
-                    </div>
-                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 4, color: 'var(--gray-900)' }}>{feature.title}</h3>
-                    <p style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginBottom: 0, lineHeight: 1.5 }}>{feature.description}</p>
-                  </div>
-                );
-
                 return (
-                  feature.path ? (
-                    <Link key={index} to={feature.path} style={{ textDecoration: 'none' }}>
-                      {CardBody}
-                    </Link>
-                  ) : (
-                    <div key={index}>{CardBody}</div>
-                  )
+                  <Link key={index} to={feature.path} style={{ textDecoration: 'none' }}>
+                    <div className="card animate-fade-in-up" style={{
+                      textAlign: 'center', padding: 24, cursor: 'pointer',
+                      animationDelay: `${index * 0.08}s`
+                    }}>
+                      <div style={{
+                        width: 48, height: 48, borderRadius: 14,
+                        background: 'var(--primary-50)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 12px'
+                      }}>
+                        <Icon style={{ width: 22, height: 22, color: 'var(--primary-600)' }} />
+                      </div>
+                      <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: 4, color: 'var(--gray-900)' }}>{feature.title}</h3>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--gray-500)', marginBottom: 0, lineHeight: 1.5 }}>{feature.description}</p>
+                    </div>
+                  </Link>
                 );
               })}
             </div>
           </div>
 
-          {/* Stats */}
+          {/* Appointment Overview */}
           <div>
-            <h2 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: 20 }}>Platform Statistics</h2>
-            <div className="grid grid-cols-4 gap-5">
-              {stats.map((stat, i) => (
-                <div key={i} className="stat-card animate-fade-in-up" style={{ animationDelay: `${i * 0.1}s` }}>
-                  <div style={{
-                    width: 40, height: 40, borderRadius: 12, background: stat.bg,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12
-                  }}>
-                    {stat.label === 'Satisfaction' ? (
-                      <StarIcon style={{ width: 20, height: 20, color: stat.color }} />
-                    ) : (
-                      <HeartIcon style={{ width: 20, height: 20, color: stat.color }} />
-                    )}
-                  </div>
-                  <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--gray-900)', marginBottom: 2 }}>{stat.value}</div>
-                  <div style={{ fontSize: '0.85rem', color: 'var(--gray-500)', fontWeight: 500 }}>{stat.label}</div>
-                </div>
-              ))}
+            <h2 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: 20 }}>My Appointments</h2>
+            <div className="grid grid-cols-3 gap-5">
+              <div className="card">
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Upcoming</h3>
+                {renderAppointmentList(categorizedAppointments.upcoming, 'upcoming')}
+              </div>
+              <div className="card">
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Ongoing</h3>
+                {renderAppointmentList(categorizedAppointments.ongoing, 'ongoing')}
+              </div>
+              <div className="card">
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Ended</h3>
+                {renderAppointmentList(categorizedAppointments.ended, 'ended')}
+              </div>
             </div>
           </div>
         </div>

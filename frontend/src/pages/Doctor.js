@@ -1,15 +1,81 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { 
-  CalendarIcon, UserGroupIcon, DocumentTextIcon, CogIcon,
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  CalendarIcon, UserGroupIcon, DocumentTextIcon,
   CheckCircleIcon, XCircleIcon, VideoCameraIcon,
-  PencilSquareIcon, DocumentPlusIcon, Squares2X2Icon,
+  DocumentPlusIcon, Squares2X2Icon,
   ClockIcon, UserCircleIcon
 } from '@heroicons/react/24/outline';
 import DashboardLayout from '../components/DashboardLayout';
+import {
+  fetchDoctorAppointments,
+  updateAppointmentStatus,
+  fetchMyDoctorProfile,
+  updateMyDoctorProfile,
+  applyDoctorProfile
+} from '../services/api';
+import { getSession } from '../services/session';
+
+const parseAppointmentDateTime = (appointment) => {
+  if (!appointment?.appointmentDate) {
+    return null;
+  }
+
+  const date = new Date(appointment.appointmentDate);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const value = String(appointment.timeSlot || '').trim().toUpperCase();
+  if (!value) {
+    return date;
+  }
+
+  const twelveHourMatch = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  if (twelveHourMatch) {
+    let hours = Number(twelveHourMatch[1]);
+    const minutes = Number(twelveHourMatch[2]);
+    const period = twelveHourMatch[3];
+
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+  }
+
+  const twentyFourHourMatch = value.match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourHourMatch) {
+    const hours = Number(twentyFourHourMatch[1]);
+    const minutes = Number(twentyFourHourMatch[2]);
+    if (hours <= 23 && minutes <= 59) {
+      date.setHours(hours, minutes, 0, 0);
+    }
+    return date;
+  }
+
+  return date;
+};
 
 const Doctor = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const session = getSession();
+
+  // Appointment state
+  const [appointments, setAppointments] = useState([]);
+  const [apptLoading, setApptLoading] = useState(true);
+  const [apptError, setApptError] = useState('');
+  const [actionState, setActionState] = useState({ id: '', action: '' });
+  const [actionFeedback, setActionFeedback] = useState('');
+
+  // Doctor profile state
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState({ type: '', message: '' });
+  const [profileForm, setProfileForm] = useState({
+    fullName: '', specialty: '', yearsOfExperience: '', medicalLicenseNumber: '',
+    consultationFee: '', bio: '', qualifications: '', languages: '', availability: []
+  });
 
   const sidebarLinks = [
     { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon },
@@ -18,33 +84,176 @@ const Doctor = () => {
     { id: 'profile', label: 'Profile', icon: UserCircleIcon },
   ];
 
-  const upcomingAppointments = [
-    { id: 1, patient: 'John Doe', date: '2024-03-29', time: '10:00 AM', status: 'confirmed', reason: 'Annual checkup', patientId: 'P001' },
-    { id: 2, patient: 'Jane Smith', date: '2024-03-29', time: '11:30 AM', status: 'pending', reason: 'Follow-up consultation', patientId: 'P002' },
-    { id: 3, patient: 'Robert Johnson', date: '2024-03-29', time: '2:00 PM', status: 'confirmed', reason: 'Cardiac evaluation', patientId: 'P003' }
-  ];
+  const loadAppointments = useCallback(async () => {
+    setApptLoading(true);
+    setApptError('');
+    try {
+      const response = await fetchDoctorAppointments();
+      const records = Array.isArray(response?.data) ? response.data : [];
+      setAppointments(records);
+    } catch (error) {
+      setApptError(error.message || 'Failed to load appointments.');
+      setAppointments([]);
+    } finally {
+      setApptLoading(false);
+    }
+  }, []);
 
-  const consultationRequests = [
-    { id: 4, patient: 'Emily Davis', date: '2024-03-30', time: '9:00 AM', status: 'pending', reason: 'New patient consultation', patientId: 'P004' },
-    { id: 5, patient: 'Michael Wilson', date: '2024-03-30', time: '10:30 AM', status: 'pending', reason: 'Second opinion', patientId: 'P005' }
-  ];
+  const loadProfile = useCallback(async () => {
+    setProfileLoading(true);
+    try {
+      const response = await fetchMyDoctorProfile();
+      const data = response?.data || {};
+      setProfile(data);
+      setProfileForm({
+        fullName: data.fullName || session?.user?.fullName || '',
+        specialty: data.specialty || '',
+        yearsOfExperience: data.yearsOfExperience || '',
+        medicalLicenseNumber: data.medicalLicenseNumber || '',
+        consultationFee: data.consultationFee || '',
+        bio: data.bio || '',
+        qualifications: Array.isArray(data.qualifications) ? data.qualifications.join(', ') : '',
+        languages: Array.isArray(data.languages) ? data.languages.join(', ') : '',
+        availability: Array.isArray(data.availability) ? data.availability : []
+      });
+    } catch (error) {
+      // Profile may not exist yet — that's OK
+    } finally {
+      setProfileLoading(false);
+    }
+  }, []);
 
-  const recentPrescriptions = [
-    { id: 1, patient: 'John Doe', date: '2024-03-15', medication: 'Lisinopril 10mg', dosage: 'Once daily', duration: '30 days' },
-    { id: 2, patient: 'Jane Smith', date: '2024-03-14', medication: 'Metformin 500mg', dosage: 'Twice daily', duration: '60 days' }
-  ];
+  useEffect(() => {
+    loadAppointments();
+    loadProfile();
+  }, [loadAppointments, loadProfile]);
 
-  const handleAppointmentAction = (id, action) => console.log(`${action} appointment ${id}`);
+  const handleAppointmentAction = async (id, action) => {
+    setActionState({ id, action });
+    setActionFeedback('');
+    try {
+      const status = action === 'accept' ? 'Confirmed' : 'Cancelled';
+      await updateAppointmentStatus(id, status);
+      setActionFeedback(`Appointment ${action === 'accept' ? 'confirmed' : 'rejected'} successfully.`);
+      await loadAppointments();
+    } catch (error) {
+      setActionFeedback(error.message || `Failed to ${action} appointment.`);
+    } finally {
+      setActionState({ id: '', action: '' });
+    }
+  };
+
+  const handleProfileChange = (e) => {
+    const { name, value } = e.target;
+    setProfileForm(cur => ({ ...cur, [name]: value }));
+  };
+
+  const addAvailability = () => {
+    setProfileForm(cur => ({
+      ...cur,
+      availability: [...cur.availability, { dayOfWeek: 'Monday', startTime: '', endTime: '' }]
+    }));
+  };
+
+  const removeAvailability = (index) => {
+    setProfileForm(cur => ({
+      ...cur,
+      availability: cur.availability.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateAvailability = (index, field, value) => {
+    setProfileForm(cur => {
+      const newAvail = [...cur.availability];
+      newAvail[index][field] = value;
+      return { ...cur, availability: newAvail };
+    });
+  };
+
+  const handleProfileSave = async (e) => {
+    e.preventDefault();
+    setProfileSaving(true);
+    setProfileFeedback({ type: '', message: '' });
+    try {
+      const payload = {
+        ...profileForm,
+        yearsOfExperience: Number(profileForm.yearsOfExperience) || 0,
+        consultationFee: Number(profileForm.consultationFee) || 0,
+        qualifications: profileForm.qualifications.split(',').map(s => s.trim()).filter(Boolean),
+        languages: profileForm.languages.split(',').map(s => s.trim()).filter(Boolean),
+        availability: profileForm.availability.filter(a => a.dayOfWeek && a.startTime && a.endTime)
+      };
+      
+      if (!profile || !profile._id) {
+        await applyDoctorProfile(payload);
+      } else {
+        await updateMyDoctorProfile(payload);
+      }
+      
+      setProfileFeedback({ type: 'success', message: 'Profile updated successfully.' });
+      await loadProfile();
+    } catch (error) {
+      setProfileFeedback({ type: 'error', message: error.message || 'Failed to update profile.' });
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const todayAppts = appointments.filter(a => a.appointmentDate && a.appointmentDate.slice(0, 10) === todayStr);
+  const pendingAppts = appointments.filter(a => a.status?.toLowerCase() === 'pending');
+  const confirmedAppts = appointments.filter(a => a.status?.toLowerCase() === 'confirmed');
+
+  const upcomingMeetingAppts = appointments
+    .filter((apt) => {
+      const status = apt.status?.toLowerCase();
+      if (status !== 'confirmed') return false;
+
+      const appointmentDateTime = parseAppointmentDateTime(apt);
+      if (!appointmentDateTime) return false;
+
+      return appointmentDateTime.getTime() > now.getTime();
+    })
+    .sort((a, b) => {
+      const first = parseAppointmentDateTime(a)?.getTime() || 0;
+      const second = parseAppointmentDateTime(b)?.getTime() || 0;
+      return first - second;
+    });
+
+  const ongoingMeetingAppts = appointments
+    .filter((apt) => {
+      const status = apt.status?.toLowerCase();
+      if (status !== 'confirmed') return false;
+
+      const appointmentDateTime = parseAppointmentDateTime(apt);
+      if (!appointmentDateTime) return false;
+
+      return appointmentDateTime.getTime() <= now.getTime();
+    })
+    .sort((a, b) => {
+      const first = parseAppointmentDateTime(a)?.getTime() || 0;
+      const second = parseAppointmentDateTime(b)?.getTime() || 0;
+      return second - first;
+    });
+
+  const handleJoinMeeting = (appointment) => {
+    if (!appointment?.videoMeetingUrl) {
+      return;
+    }
+
+    window.open(appointment.videoMeetingUrl, '_blank', 'noopener,noreferrer');
+  };
 
   const renderDashboard = () => (
     <div>
       {/* Stats */}
       <div className="grid grid-cols-4 gap-5" style={{ marginBottom: 32 }}>
         {[
-          { label: "Today's Patients", value: '8', color: '#4f46e5', bg: '#eef2ff', icon: UserGroupIcon },
-          { label: 'Pending Requests', value: String(consultationRequests.length), color: '#f59e0b', bg: '#fffbeb', icon: ClockIcon },
-          { label: 'Prescriptions', value: '5', color: '#10b981', bg: '#ecfdf5', icon: DocumentTextIcon },
-          { label: 'Rating', value: '4.8', color: '#7c3aed', bg: '#f5f3ff', icon: CheckCircleIcon },
+          { label: "Today's Patients", value: String(todayAppts.length), color: '#4f46e5', bg: '#eef2ff', icon: UserGroupIcon },
+          { label: 'Pending Requests', value: String(pendingAppts.length), color: '#f59e0b', bg: '#fffbeb', icon: ClockIcon },
+          { label: 'Confirmed', value: String(confirmedAppts.length), color: '#10b981', bg: '#ecfdf5', icon: DocumentTextIcon },
+          { label: 'Total', value: String(appointments.length), color: '#7c3aed', bg: '#f5f3ff', icon: CheckCircleIcon },
         ].map((s, i) => {
           const Icon = s.icon;
           return (
@@ -65,93 +274,158 @@ const Doctor = () => {
         {/* Today's Schedule */}
         <div className="card">
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Today's Schedule</h3>
-          {upcomingAppointments.map(apt => (
-            <div key={apt.id} className="item-row">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <UserGroupIcon style={{ width: 20, height: 20, color: 'var(--primary-600)' }} />
+          {apptLoading ? (
+            <div className="loading-state">Loading appointments...</div>
+          ) : apptError ? (
+            <div className="error-state">{apptError}</div>
+          ) : todayAppts.length === 0 ? (
+            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No appointments scheduled for today.</div>
+          ) : (
+            todayAppts.map((apt, idx) => (
+              <div key={apt._id || idx} className="item-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <UserGroupIcon style={{ width: 20, height: 20, color: 'var(--primary-600)' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>
+                      {apt.patientId?.fullName || apt.patientName || 'Patient'}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                      {apt.reason || 'Consultation'} • {apt.timeSlot || 'TBD'}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>{apt.patient}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>{apt.reason} • {apt.time}</div>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--primary-500)' }}>ID: {apt.patientId}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className={`status ${apt.status?.toLowerCase() === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status}</span>
+                  {apt.status?.toLowerCase() === 'confirmed' && (
+                    <button className="btn btn-success btn-sm">
+                      <VideoCameraIcon style={{ width: 14, height: 14 }} /> Join
+                    </button>
+                  )}
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span className={`status ${apt.status === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status}</span>
-                {apt.status === 'confirmed' && (
-                  <button className="btn btn-success btn-sm">
-                    <VideoCameraIcon style={{ width: 14, height: 14 }} /> Join
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
 
         {/* Consultation Requests */}
         <div className="card">
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Consultation Requests</h3>
-          {consultationRequests.map(r => (
-            <div key={r.id} className="item-row">
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>{r.patient}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>{r.reason} • {r.date} at {r.time}</div>
-              </div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn btn-success btn-sm" onClick={() => handleAppointmentAction(r.id, 'accept')}>
-                  <CheckCircleIcon style={{ width: 14, height: 14 }} /> Accept
-                </button>
-                <button className="btn btn-danger btn-sm" onClick={() => handleAppointmentAction(r.id, 'reject')}>
-                  <XCircleIcon style={{ width: 14, height: 14 }} /> Reject
-                </button>
-              </div>
+          {actionFeedback && (
+            <div style={{
+              marginBottom: 12, padding: '10px 12px', borderRadius: 10, fontSize: '0.85rem',
+              background: actionFeedback.includes('success') || actionFeedback.includes('confirmed') ? '#f0fdf4' : '#fef2f2',
+              color: actionFeedback.includes('success') || actionFeedback.includes('confirmed') ? '#166534' : '#b91c1c',
+              border: `1px solid ${actionFeedback.includes('success') || actionFeedback.includes('confirmed') ? '#bbf7d0' : '#fecaca'}`
+            }}>
+              {actionFeedback}
             </div>
-          ))}
-        </div>
-
-        {/* Recent Prescriptions */}
-        <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>Recent Prescriptions</h3>
-            <Link to="/doctor/prescriptions" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary-600)' }}>Manage</Link>
-          </div>
-          {recentPrescriptions.map(rx => (
-            <div key={rx.id} className="item-row">
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)', marginBottom: 2 }}>{rx.patient}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>{rx.medication} • {rx.dosage} for {rx.duration}</div>
-              </div>
-              <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>{rx.date}</span>
-            </div>
-          ))}
-        </div>
-
-        {/* Quick Actions */}
-        <div className="card">
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Quick Actions</h3>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { to: '/doctor/schedule', icon: CalendarIcon, label: 'Manage Schedule', color: '#4f46e5', bg: '#eef2ff' },
-              { to: '/doctor/prescriptions', icon: DocumentPlusIcon, label: 'Issue Prescription', color: '#10b981', bg: '#ecfdf5' },
-              { to: '/doctor/profile', icon: PencilSquareIcon, label: 'Update Profile', color: '#0ea5e9', bg: '#f0f9ff' },
-              { to: '/doctor/reports', icon: DocumentTextIcon, label: 'View Reports', color: '#f59e0b', bg: '#fffbeb' },
-            ].map((a, i) => {
-              const Icon = a.icon;
-              return (
-                <Link key={i} to={a.to} style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
-                  borderRadius: 14, border: '1px solid var(--gray-100)', textDecoration: 'none',
-                  transition: 'all 0.2s ease', background: 'white'
-                }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: a.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon style={{ width: 18, height: 18, color: a.color }} />
+          )}
+          {pendingAppts.length === 0 ? (
+            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No pending consultation requests.</div>
+          ) : (
+            pendingAppts.map((r, idx) => (
+              <div key={r._id || idx} className="item-row">
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>
+                    {r.patientId?.fullName || r.patientName || 'Patient'}
                   </div>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--gray-700)' }}>{a.label}</span>
-                </Link>
-              );
-            })}
-          </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                    {r.reason || 'Consultation'} • {r.appointmentDate ? new Date(r.appointmentDate).toLocaleDateString() : ''} {r.timeSlot && `at ${r.timeSlot}`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    className="btn btn-success btn-sm"
+                    onClick={() => handleAppointmentAction(r._id, 'accept')}
+                    disabled={actionState.id === r._id}
+                  >
+                    <CheckCircleIcon style={{ width: 14, height: 14 }} />
+                    {actionState.id === r._id && actionState.action === 'accept' ? 'Accepting...' : 'Accept'}
+                  </button>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    onClick={() => handleAppointmentAction(r._id, 'reject')}
+                    disabled={actionState.id === r._id}
+                  >
+                    <XCircleIcon style={{ width: 14, height: 14 }} />
+                    {actionState.id === r._id && actionState.action === 'reject' ? 'Rejecting...' : 'Reject'}
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-6" style={{ marginTop: 24 }}>
+        <div className="card">
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Ongoing Meetings</h3>
+          {apptLoading ? (
+            <div className="loading-state">Loading meetings...</div>
+          ) : ongoingMeetingAppts.length === 0 ? (
+            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No ongoing meetings right now.</div>
+          ) : (
+            ongoingMeetingAppts.map((apt, idx) => (
+              <div key={apt._id || idx} className="item-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>
+                      {apt.patientId?.fullName || apt.patientName || 'Patient'}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                      {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : 'TBD'} {apt.timeSlot && `at ${apt.timeSlot}`}
+                    </div>
+                  </div>
+                  <span className="status status-confirmed">{apt.status}</span>
+                </div>
+                <button
+                  className="btn btn-success btn-sm"
+                  onClick={() => handleJoinMeeting(apt)}
+                  disabled={!apt.videoMeetingUrl}
+                  style={{ alignSelf: 'flex-end' }}
+                >
+                  <VideoCameraIcon style={{ width: 14, height: 14 }} />
+                  {apt.videoMeetingUrl ? 'Join Live Meeting' : 'Meeting Link Not Ready'}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="card">
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Upcoming Meetings</h3>
+          {apptLoading ? (
+            <div className="loading-state">Loading meetings...</div>
+          ) : upcomingMeetingAppts.length === 0 ? (
+            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No upcoming meetings.</div>
+          ) : (
+            upcomingMeetingAppts.map((apt, idx) => (
+              <div key={apt._id || idx} className="item-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>
+                      {apt.patientId?.fullName || apt.patientName || 'Patient'}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                      {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : 'TBD'} {apt.timeSlot && `at ${apt.timeSlot}`}
+                    </div>
+                  </div>
+                  <span className="status status-confirmed">{apt.status}</span>
+                </div>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handleJoinMeeting(apt)}
+                  disabled={!apt.videoMeetingUrl}
+                  style={{ alignSelf: 'flex-end' }}
+                >
+                  <VideoCameraIcon style={{ width: 14, height: 14 }} />
+                  {apt.videoMeetingUrl ? 'Join Live Meeting' : 'Meeting Link Not Ready'}
+                </button>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -159,104 +433,126 @@ const Doctor = () => {
 
   const renderSchedule = () => (
     <div className="card" style={{ maxWidth: 800 }}>
-      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 24 }}>Availability Settings</h3>
-      <div className="grid grid-cols-2 gap-5" style={{ marginBottom: 24 }}>
-        <div className="form-group">
-          <label className="form-label">Working Days</label>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => (
-              <label key={day} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.85rem', color: 'var(--gray-700)' }}>
-                <input type="checkbox" defaultChecked={!['Saturday', 'Sunday'].includes(day)} /> {day}
-              </label>
-            ))}
+      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 24 }}>All Appointments</h3>
+      {apptLoading ? (
+        <div className="loading-state">Loading...</div>
+      ) : appointments.length === 0 ? (
+        <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No appointments found.</div>
+      ) : (
+        appointments.map((apt, idx) => (
+          <div key={apt._id || idx} className="item-row">
+            <div>
+              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>
+                {apt.patientId?.fullName || apt.patientName || 'Patient'}
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                {apt.reason || 'Consultation'} • {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : 'TBD'} {apt.timeSlot && `at ${apt.timeSlot}`}
+              </div>
+            </div>
+            <span className={`status ${apt.status?.toLowerCase() === 'confirmed' ? 'status-confirmed' : apt.status?.toLowerCase() === 'cancelled' ? 'status-inactive' : 'status-pending'}`}>
+              {apt.status || 'Pending'}
+            </span>
           </div>
-        </div>
-        <div className="form-group">
-          <label className="form-label">Consultation Hours</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <input type="time" defaultValue="09:00" className="form-input" />
-            <span style={{ color: 'var(--gray-500)', fontSize: '0.85rem' }}>to</span>
-            <input type="time" defaultValue="17:00" className="form-input" />
-          </div>
-        </div>
-        <div className="form-group">
-          <label className="form-label">Consultation Duration</label>
-          <select defaultValue="30" className="form-select">
-            <option value="15">15 minutes</option><option value="30">30 minutes</option>
-            <option value="45">45 minutes</option><option value="60">60 minutes</option>
-          </select>
-        </div>
-        <div className="form-group">
-          <label className="form-label">Break Time</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <input type="time" defaultValue="13:00" className="form-input" />
-            <span style={{ color: 'var(--gray-500)', fontSize: '0.85rem' }}>to</span>
-            <input type="time" defaultValue="14:00" className="form-input" />
-          </div>
-        </div>
-      </div>
-      <div className="form-group">
-        <label className="form-label">Special Notes</label>
-        <textarea defaultValue="Please arrive 10 minutes before your scheduled appointment time." rows={3} className="form-textarea" />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="btn btn-primary">Save Schedule</button>
-      </div>
+        ))
+      )}
     </div>
   );
 
   const renderProfile = () => (
     <div className="card" style={{ maxWidth: 800 }}>
       <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 24 }}>Professional Information</h3>
-      <div className="grid grid-cols-2 gap-5" style={{ marginBottom: 24 }}>
-        {[
-          { label: 'Full Name', type: 'text', val: 'Dr. Sarah Johnson' },
-          { label: 'Specialty', type: 'select', val: 'cardiology', opts: ['Cardiology', 'Dermatology', 'Pediatrics', 'Orthopedics', 'General Practice'] },
-          { label: 'Years of Experience', type: 'number', val: '15' },
-          { label: 'License Number', type: 'text', val: 'MD123456' },
-          { label: 'Consultation Fee ($)', type: 'number', val: '150' },
-          { label: 'Languages', type: 'text', val: 'English, Spanish' },
-        ].map((f, i) => (
-          <div key={i} className="form-group">
-            <label className="form-label">{f.label}</label>
-            {f.type === 'select' ? (
-              <select defaultValue={f.val} className="form-select">
-                {f.opts.map(o => <option key={o} value={o.toLowerCase()}>{o}</option>)}
-              </select>
+      {profileFeedback.message && (
+        <div style={{
+          marginBottom: 20, padding: '12px 14px', borderRadius: 14, fontSize: '0.9rem',
+          background: profileFeedback.type === 'success' ? '#f0fdf4' : '#fef2f2',
+          color: profileFeedback.type === 'success' ? '#166534' : '#b91c1c',
+          border: `1px solid ${profileFeedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`
+        }}>
+          {profileFeedback.message}
+        </div>
+      )}
+      {profileLoading ? (
+        <div className="loading-state">Loading profile...</div>
+      ) : (
+        <form onSubmit={handleProfileSave}>
+          <div className="grid grid-cols-2 gap-5" style={{ marginBottom: 24 }}>
+            {[
+              { label: 'Full Name', name: 'fullName', type: 'text' },
+              { label: 'Specialty', name: 'specialty', type: 'text' },
+              { label: 'Years of Experience', name: 'yearsOfExperience', type: 'number' },
+              { label: 'License Number', name: 'medicalLicenseNumber', type: 'text' },
+              { label: 'Consultation Fee ($)', name: 'consultationFee', type: 'number' },
+              { label: 'Languages (comma separated)', name: 'languages', type: 'text' },
+            ].map((f, i) => (
+              <div key={i} className="form-group">
+                <label className="form-label">{f.label}</label>
+                <input
+                  type={f.type}
+                  name={f.name}
+                  value={profileForm[f.name]}
+                  onChange={handleProfileChange}
+                  className="form-input"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="form-group" style={{ marginBottom: 20 }}>
+            <label className="form-label">Qualifications (comma separated)</label>
+            <input
+              type="text"
+              name="qualifications"
+              value={profileForm.qualifications}
+              onChange={handleProfileChange}
+              className="form-input"
+              placeholder="e.g. MBBS, MD, FRCS"
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 24 }}>
+            <label className="form-label">Bio</label>
+            <textarea
+              name="bio"
+              value={profileForm.bio}
+              onChange={handleProfileChange}
+              rows={3}
+              className="form-textarea"
+              placeholder="Describe your experience and expertise..."
+            />
+          </div>
+          <div className="form-group" style={{ marginBottom: 24 }}>
+            <label className="form-label">Available Schedule</label>
+            {profileForm.availability.length === 0 ? (
+              <div style={{ color: 'var(--gray-500)', fontSize: '0.85rem', marginBottom: 12 }}>No working hours set. Patients will not be able to book you.</div>
             ) : (
-              <input type={f.type} defaultValue={f.val} className="form-input" />
+              <div className="space-y-3" style={{ marginBottom: 16 }}>
+                {profileForm.availability.map((block, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <select className="form-input" value={block.dayOfWeek} onChange={(e) => updateAvailability(i, 'dayOfWeek', e.target.value)} style={{ padding: '8px', minHeight: 'auto' }}>
+                      {['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <input type="text" className="form-input" placeholder="09:00 AM" value={block.startTime} onChange={(e) => updateAvailability(i, 'startTime', e.target.value)} style={{ padding: '8px', minHeight: 'auto' }} />
+                    <span style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>to</span>
+                    <input type="text" className="form-input" placeholder="05:00 PM" value={block.endTime} onChange={(e) => updateAvailability(i, 'endTime', e.target.value)} style={{ padding: '8px', minHeight: 'auto' }} />
+                    <button type="button" onClick={() => removeAvailability(i)} className="btn btn-danger btn-sm" style={{ padding: '6px' }}><XCircleIcon style={{ width: 14, height: 14 }} /></button>
+                  </div>
+                ))}
+              </div>
             )}
+            <button type="button" onClick={addAvailability} className="btn btn-secondary btn-sm">+ Add Time Slot</button>
           </div>
-        ))}
-      </div>
-      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 20 }}>Education & Qualifications</h3>
-      <div className="grid grid-cols-2 gap-5" style={{ marginBottom: 24 }}>
-        {[
-          { label: 'Medical School', val: 'Harvard Medical School' },
-          { label: 'Graduation Year', val: '2008', type: 'number' },
-          { label: 'Residency', val: 'Massachusetts General Hospital' },
-          { label: 'Fellowship', val: 'Interventional Cardiology' },
-        ].map((f, i) => (
-          <div key={i} className="form-group">
-            <label className="form-label">{f.label}</label>
-            <input type={f.type || 'text'} defaultValue={f.val} className="form-input" />
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="btn btn-primary" type="submit" disabled={profileSaving}>
+              {profileSaving ? 'Saving...' : 'Save Changes'}
+            </button>
           </div>
-        ))}
-      </div>
-      <div className="form-group">
-        <label className="form-label">Bio</label>
-        <textarea rows={3} defaultValue="Dr. Sarah Johnson is a board-certified cardiologist with over 15 years of experience in treating cardiovascular diseases." className="form-textarea" />
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button className="btn btn-primary">Save Changes</button>
-      </div>
+        </form>
+      )}
     </div>
   );
 
   return (
     <DashboardLayout
       title="Doctor Dashboard"
-      subtitle="Manage your schedule, patients, and consultations"
+      subtitle={`Welcome, ${session?.user?.fullName || 'Doctor'} — Manage your schedule, patients, and consultations`}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       sidebarLinks={sidebarLinks}
@@ -266,15 +562,25 @@ const Doctor = () => {
       {activeTab === 'patients' && (
         <div className="card">
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Patient List</h3>
-          {upcomingAppointments.map(apt => (
-            <div key={apt.id} className="item-row">
-              <div>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>{apt.patient}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>ID: {apt.patientId} • {apt.reason}</div>
+          {apptLoading ? (
+            <div className="loading-state">Loading...</div>
+          ) : appointments.length === 0 ? (
+            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No patient records available.</div>
+          ) : (
+            appointments.map((apt, idx) => (
+              <div key={apt._id || idx} className="item-row">
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>
+                    {apt.patientId?.fullName || apt.patientName || 'Patient'}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                    {apt.reason || 'General'} • {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : ''}
+                  </div>
+                </div>
+                <span className={`status ${apt.status?.toLowerCase() === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status || 'Pending'}</span>
               </div>
-              <span className={`status ${apt.status === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status}</span>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
       {activeTab === 'profile' && renderProfile()}

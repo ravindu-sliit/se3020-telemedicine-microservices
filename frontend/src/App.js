@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './theme.css';
+import { getSession } from './services/session';
 
 // Import pages
 import Landing from './pages/Landing';
@@ -14,14 +15,29 @@ import BookAppointment from './pages/BookAppointment';
 import TelemedicineRoom from './pages/TelemedicineRoom';
 import SymptomChecker from './pages/SymptomChecker';
 
-function App() {
-  // For demo purposes, set a default role
-  React.useEffect(() => {
-    if (!localStorage.getItem('userRole')) {
-      localStorage.setItem('userRole', 'patient');
-    }
-  }, []);
+const roleHomePath = (role) => {
+  if (role === 'admin') return '/admin';
+  if (role === 'doctor') return '/doctor';
+  if (role === 'patient') return '/patient';
+  return '/home';
+};
 
+const RoleProtectedRoute = ({ allowedRoles, element }) => {
+  const session = getSession();
+  const userRole = session?.user?.role;
+
+  if (!session?.token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (!allowedRoles.includes(userRole)) {
+    return <Navigate to={roleHomePath(userRole)} replace />;
+  }
+
+  return element;
+};
+
+function App() {
   return (
     <Router>
       <div className="App">
@@ -35,16 +51,34 @@ function App() {
           <Route path="/home" element={<Home />} />
           
           {/* Patient Routes */}
-          <Route path="/patient" element={<Patient />} />
-          <Route path="/patient/profile" element={<PatientProfile />} />
-          <Route path="/patient/symptom-checker" element={<SymptomChecker />} />
-          <Route path="/patient/book-appointment" element={<BookAppointment />} />
+          <Route
+            path="/patient"
+            element={<RoleProtectedRoute allowedRoles={['patient']} element={<Patient />} />}
+          />
+          <Route
+            path="/patient/profile"
+            element={<RoleProtectedRoute allowedRoles={['patient']} element={<PatientProfile />} />}
+          />
+          <Route
+            path="/patient/symptom-checker"
+            element={<RoleProtectedRoute allowedRoles={['patient']} element={<SymptomChecker />} />}
+          />
+          <Route
+            path="/patient/book-appointment"
+            element={<RoleProtectedRoute allowedRoles={['patient']} element={<BookAppointment />} />}
+          />
           
           {/* Doctor Routes */}
-          <Route path="/doctor" element={<Doctor />} />
+          <Route
+            path="/doctor"
+            element={<RoleProtectedRoute allowedRoles={['doctor']} element={<Doctor />} />}
+          />
           
           {/* Admin Routes */}
-          <Route path="/admin" element={<Admin />} />
+          <Route
+            path="/admin"
+            element={<RoleProtectedRoute allowedRoles={['admin']} element={<Admin />} />}
+          />
           
           {/* Shared Routes */}
           <Route path="/telemedicine-room" element={<TelemedicineRoom />} />

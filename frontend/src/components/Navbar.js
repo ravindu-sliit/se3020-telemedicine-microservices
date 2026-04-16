@@ -8,6 +8,13 @@ const Navbar = () => {
   const path = location.pathname;
   const session = getSession();
   const isLoggedIn = Boolean(session?.token);
+  const isLandingPage = path === '/';
+  const isHomePage = path === '/home';
+  const hideForRoleDashboards = path.startsWith('/admin') || path.startsWith('/doctor');
+
+  if (hideForRoleDashboards) {
+    return null;
+  }
 
   const links = [
     { to: '/home', label: 'Home' },
@@ -18,7 +25,7 @@ const Navbar = () => {
 
   const handleLogout = () => {
     clearSession();
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   return (
@@ -31,32 +38,47 @@ const Navbar = () => {
           <span className="navbar-brand-text">MediConnect</span>
         </Link>
         <div className="navbar-links">
-          {links.map(link => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`navbar-link ${path === link.to || (link.to !== '/home' && path.startsWith(link.to)) ? 'active' : ''}`}
-            >
-              {link.label}
-            </Link>
-          ))}
-          {isLoggedIn ? (
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="navbar-link"
-              style={{ background: 'transparent', border: 0, cursor: 'pointer' }}
-            >
-              Logout
-            </button>
-          ) : (
+          {isLandingPage ? (
             <>
-              <Link to="/login" className={`navbar-link ${path === '/login' ? 'active' : ''}`}>
+              <Link to="/login" className="btn btn-secondary btn-sm" style={{ marginRight: 8 }}>
                 Sign In
               </Link>
-              <Link to="/register" className={`navbar-link ${path === '/register' ? 'active' : ''}`}>
-                Register
+              <Link to="/register" className="btn btn-primary btn-sm">
+                Sign Up
               </Link>
+            </>
+          ) : (
+            <>
+              {isLoggedIn ? (
+                <>
+                  {links.map(link => (
+                    <Link
+                      key={link.to}
+                      to={link.to}
+                      className={`navbar-link ${path === link.to || (link.to !== '/home' && path.startsWith(link.to)) ? 'active' : ''}`}
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="btn btn-danger btn-sm"
+                    style={{ marginLeft: 8 }}
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : !isHomePage ? (
+                <>
+                  <Link to="/login" className="btn btn-secondary btn-sm" style={{ marginRight: 8 }}>
+                    Sign In
+                  </Link>
+                  <Link to="/register" className="btn btn-primary btn-sm">
+                    Sign Up
+                  </Link>
+                </>
+              ) : null}
             </>
           )}
         </div>

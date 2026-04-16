@@ -6,7 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const createAppointment = async (req, res) => {
     try {
         // Updated to match new schema: appointmentDate instead of date
-        const { doctorId, appointmentDate, timeSlot } = req.body;
+        const { doctorId, appointmentDate, timeSlot, patientName, doctorName } = req.body;
         const patientId = req.user.id; // From Binoth's auth middleware
 
         if (!doctorId || !appointmentDate || !timeSlot) {
@@ -16,6 +16,8 @@ const createAppointment = async (req, res) => {
         const newAppointment = await Appointment.create({
             patientId,
             doctorId,
+            patientName,
+            doctorName,
             appointmentDate,
             timeSlot,
             status: 'Pending',
