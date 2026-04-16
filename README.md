@@ -130,7 +130,7 @@ Default API targets in frontend service layer:
 
 - auth: `http://localhost:5001/api`
 - patient: `http://localhost:5002/api`
-- doctor: `http://localhost:5002/api`
+- doctor: `http://localhost:5003/api`
 - ai: `http://localhost:5005/api`
 - payment: `http://localhost:5006/api`
 - notification: `http://localhost:5007/api`
@@ -154,4 +154,3 @@ Default API targets in frontend service layer:
 - `.env` files are ignored and should remain local.
 - Use secret templates for onboarding.
 - Never commit real credentials.
-- Doctor-service uses port `5002` as requested; if you publish patient-service locally on the same host port, remap one of them to avoid a collision.

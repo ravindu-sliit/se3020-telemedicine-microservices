@@ -221,5 +221,5 @@ kubectl scale deployment patient-service --replicas=0
 
 ### Doctor service
 
-- Doctor service listens on port `5002`.
+- Doctor service listens on port `5003`.
 - Doctor service reads `MONGO_URI` and shares the auth JWT secret through `auth-service-secrets`.

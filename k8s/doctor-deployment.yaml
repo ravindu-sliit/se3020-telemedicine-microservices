@@ -19,7 +19,7 @@ spec:
           image: doctor-service-image:latest
           imagePullPolicy: Never
           ports:
-            - containerPort: 5002
+            - containerPort: 5003
           env:
             - name: MONGO_URI
               valueFrom:
@@ -34,4 +34,4 @@ spec:
             - name: CORS_ORIGIN
               value: "http://smart-healthcare.local"
             - name: PORT
-              value: "5002"
+              value: "5003"

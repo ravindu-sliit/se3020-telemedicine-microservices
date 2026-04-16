@@ -17,7 +17,7 @@ if (!mongodbUri) {
 }
 
 const env = {
-  port: Number(process.env.PORT) || 5002,
+  port: Number(process.env.PORT) || 5003,
   mongodbUri,
   jwtSecret: process.env.JWT_SECRET
 };
