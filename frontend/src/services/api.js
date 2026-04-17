@@ -50,6 +50,8 @@ const parseResponse = async (response) => {
   return payload;
 };
 
+// ── Auth Service ────────────────────────────────────────────────────────────
+
 export const registerUser = async (formData) => {
   const response = await fetch(`${AUTH_BASE_URL}/auth/register`, {
     method: 'POST',
@@ -130,6 +132,8 @@ export const rejectAuthDoctor = async (userId) => {
   return parseResponse(response);
 };
 
+// ── Patient Service ─────────────────────────────────────────────────────────
+
 export const fetchPatientProfile = async (userId) => {
   const response = await fetch(`${PATIENT_BASE_URL}/patients/profile/${userId}`, {
     headers: buildHeaders()
@@ -161,6 +165,19 @@ export const updatePatientProfile = async (userId, profileData) => {
 
   return parseResponse(response);
 };
+
+// NEW: Upload Medical Report (No Content-Type header so the browser sets the boundary!)
+export const uploadMedicalReport = async (patientId, formData) => {
+  const response = await fetch(`${PATIENT_BASE_URL}/patients/${patientId}/reports`, {
+    method: 'POST',
+    headers: buildHeaders(), 
+    body: formData
+  });
+
+  return parseResponse(response);
+};
+
+// ── AI & Other Services ─────────────────────────────────────────────────────
 
 export const checkSymptoms = async (symptoms) => {
   const response = await fetch(`${AI_BASE_URL}/ai/check-symptoms`, {
@@ -278,6 +295,21 @@ export const issuePrescription = async (prescriptionData) => {
   return parseResponse(response);
 };
 
+export const fetchPatientReports = async (patientId) => {
+  const response = await fetch(`${DOCTOR_BASE_URL}/doctors/patients/${patientId}/reports`, {
+    headers: buildHeaders()
+  });
+  return parseResponse(response);
+};
+
+export const disableDoctorProfile = async () => {
+  const response = await fetch(`${DOCTOR_BASE_URL}/doctors/disable`, {
+    method: 'PUT',
+    headers: buildHeaders()
+  });
+  return parseResponse(response);
+};
+
 // ── Appointment Service ─────────────────────────────────────────────────────
 
 export const fetchPatientAppointments = async () => {
@@ -316,6 +348,15 @@ export const cancelAppointment = async (appointmentId) => {
   const response = await fetch(`${APPOINTMENT_BASE_URL}/appointments/${appointmentId}/cancel`, {
     method: 'PUT',
     headers: buildHeaders()
+  });
+  return parseResponse(response);
+};
+
+export const rescheduleAppointment = async (appointmentId, { newAppointmentDate, newTimeSlot }) => {
+  const response = await fetch(`${APPOINTMENT_BASE_URL}/appointments/${appointmentId}/reschedule`, {
+    method: 'PUT',
+    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ newAppointmentDate, newTimeSlot })
   });
   return parseResponse(response);
 };
