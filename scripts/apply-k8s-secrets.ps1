@@ -77,9 +77,21 @@ Apply-Secret "payment-service-secrets" @{
   STRIPE_SECRET_KEY = Get-RequiredEnv "STRIPE_SECRET_KEY"
 }
 
+Apply-Secret "ai-service-secrets" @{
+  GEMINI_API_KEY = Get-OptionalEnv "GEMINI_API_KEY" ""
+}
+
 $emailUser = Get-RequiredEnv "EMAIL_USER"
 $emailProvider = Get-OptionalEnv "EMAIL_PROVIDER" "auto"
 $emailFrom = Get-OptionalEnv "EMAIL_FROM" $emailUser
+$twilioPhoneNumber = Get-OptionalEnv "TWILIO_PHONE_NUMBER" ""
+if ([string]::IsNullOrWhiteSpace($twilioPhoneNumber)) {
+  $twilioPhoneNumber = Get-OptionalEnv "TWILIO_PHONE_NUMBER_FROM" ""
+}
+if ([string]::IsNullOrWhiteSpace($twilioPhoneNumber)) {
+  # Backward-compatible fallback for typoed key that may exist in local files.
+  $twilioPhoneNumber = Get-OptionalEnv "TWILIO_PHONE_NUMBER_FRom" ""
+}
 
 Apply-Secret "notification-service-secrets" @{
   EMAIL_USER = $emailUser
@@ -87,6 +99,9 @@ Apply-Secret "notification-service-secrets" @{
   EMAIL_PROVIDER = $emailProvider
   EMAIL_FROM = $emailFrom
   SENDGRID_API_KEY = Get-OptionalEnv "SENDGRID_API_KEY" ""
+  TWILIO_ACCOUNT_SID = Get-OptionalEnv "TWILIO_ACCOUNT_SID" ""
+  TWILIO_AUTH_TOKEN = Get-OptionalEnv "TWILIO_AUTH_TOKEN" ""
+  TWILIO_PHONE_NUMBER = $twilioPhoneNumber
 }
 
 Write-Host "All Kubernetes secrets applied successfully in namespace '$Namespace'."
