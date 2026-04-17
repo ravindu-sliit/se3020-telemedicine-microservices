@@ -1,13 +1,59 @@
-const Appointment = require('../models/Appointment');
-const { randomUUID } = require('crypto');
+/**
+ * @file appointmentController.js
+ * @description Handles core business logic for the Appointment Microservice,
+ * including booking, status management, and patient/doctor queue retrieval.
+ * Video consultation sessions are delegated to the Telemedicine Microservice.
+ */
 
-// @desc    Create a new appointment request
-// @route   POST /api/appointments
+const Appointment = require('../models/Appointment');
+
+const TELEMEDICINE_API_URL =
+  process.env.TELEMEDICINE_API_URL || 'http://telemedicine-service:5008/api/telemedicine';
+
+/**
+ * Request a secure video session from the Telemedicine Microservice.
+ * Forwards the doctor's Bearer token so the remote service can authorize.
+ * Returns the meeting URL on success, or null if the call fails
+ * (the appointment is still confirmed — frontend shows "Meeting Link Not Ready").
+ */
+const requestVideoSession = async ({ appointmentId, patientId, doctorId, authHeader }) => {
+  try {
+    const response = await fetch(`${TELEMEDICINE_API_URL}/sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: authHeader
+      },
+      body: JSON.stringify({ appointmentId, patientId, doctorId })
+    });
+
+    if (!response.ok) {
+      console.error(
+        `Telemedicine session creation failed (${response.status}) for appointment ${appointmentId}`
+      );
+      return null;
+    }
+
+    const payload = await response.json();
+    return payload?.data?.videoMeetingUrl || null;
+  } catch (error) {
+    console.error('Telemedicine service call failed:', error.message);
+    return null;
+  }
+};
+
+/**
+ * @desc    Create a new appointment request
+ * @route   POST /api/appointments
+ * @access  Private (Patient role required)
+ */
 const createAppointment = async (req, res) => {
     try {
-        // Updated to match new schema: appointmentDate instead of date
         const { doctorId, appointmentDate, timeSlot, patientName, doctorName } = req.body;
-        const patientId = req.user.id; // From Binoth's auth middleware
+        
+        // Security: Extract patientId directly from the validated JWT token
+        // This prevents a user from spoofing an appointment for someone else.
+        const patientId = req.user.id; 
 
         if (!doctorId || !appointmentDate || !timeSlot) {
             return res.status(400).json({ success: false, message: 'Please provide doctorId, appointmentDate, and timeSlot' });
@@ -20,8 +66,8 @@ const createAppointment = async (req, res) => {
             doctorName,
             appointmentDate,
             timeSlot,
-            status: 'Pending',
-            paymentStatus: 'Unpaid' // Default added per new schema
+            status: 'Pending', // Appointments always start as pending until doctor review
+            paymentStatus: 'Unpaid' 
         });
 
         res.status(201).json({ 
@@ -35,14 +81,17 @@ const createAppointment = async (req, res) => {
     }
 };
 
-// @desc    Update appointment status (Accept or Reject)
-// @route   PUT /api/appointments/:id/status
+/**
+ * @desc    Update appointment status (Confirm, Cancel, or Complete)
+ * @route   PUT /api/appointments/:id/status
+ * @access  Private (Doctor role required)
+ */
 const updateAppointmentStatus = async (req, res) => {
     try {
         const appointmentId = req.params.id;
         const { status } = req.body; 
 
-        // Updated to match new schema enums
+        // Validate that the incoming status matches our allowed enums
         const validStatuses = ['Confirmed', 'Cancelled', 'Completed'];
         if (!validStatuses.includes(status)) {
             return res.status(400).json({ success: false, message: 'Invalid status update' });
@@ -50,9 +99,25 @@ const updateAppointmentStatus = async (req, res) => {
 
         let updateData = { status: status };
 
-        // If the doctor confirms the appointment, generate the full Jitsi Meeting URL
+        // On confirm, delegate secure video session creation to the Telemedicine Microservice.
+        // The appointment document keeps videoMeetingUrl for the frontend, while the
+        // authoritative session record lives in the telemedicine-service.
         if (status === 'Confirmed') {
-            updateData.videoMeetingUrl = `https://meet.jit.si/Consultation-${appointmentId}-${randomUUID()}`;
+            const existing = await Appointment.findById(appointmentId);
+            if (!existing) {
+                return res.status(404).json({ success: false, message: 'Appointment not found' });
+            }
+
+            const videoMeetingUrl = await requestVideoSession({
+                appointmentId,
+                patientId: existing.patientId,
+                doctorId: existing.doctorId,
+                authHeader: req.headers.authorization
+            });
+
+            if (videoMeetingUrl) {
+                updateData.videoMeetingUrl = videoMeetingUrl;
+            }
         }
 
         const appointment = await Appointment.findByIdAndUpdate(
@@ -76,12 +141,16 @@ const updateAppointmentStatus = async (req, res) => {
     }
 };
 
-// @desc    Get all appointments for the logged-in patient
-// @route   GET /api/appointments/patient/me
+/**
+ * @desc    Get all appointments for the currently logged-in patient
+ * @route   GET /api/appointments/patient/me
+ * @access  Private (Patient role required)
+ */
 const getPatientAppointments = async (req, res) => {
     try {
+        // Security: Filter appointments strictly by the JWT user ID
         const appointments = await Appointment.find({ patientId: req.user.id })
-            .sort({ appointmentDate: 1, timeSlot: 1 }); // Updated to appointmentDate
+            .sort({ appointmentDate: 1, timeSlot: 1 }); // Chronological sorting
 
         res.status(200).json({
             success: true,
@@ -94,11 +163,14 @@ const getPatientAppointments = async (req, res) => {
     }
 };
 
-// @desc    Get all appointments for the logged-in doctor
-// @route   GET /api/appointments/doctor/me
+/**
+ * @desc    Get all appointments assigned to the logged-in doctor
+ * @route   GET /api/appointments/doctor/me
+ * @access  Private (Doctor role required)
+ */
 const getDoctorAppointments = async (req, res) => {
     try {
-        // Security Upgrade: Fetch by logged-in doctor's token ID, not a URL parameter
+        // Security: Filter appointments strictly by the JWT doctor ID
         const appointments = await Appointment.find({ doctorId: req.user.id })
             .sort({ appointmentDate: 1, timeSlot: 1 });
 
@@ -113,8 +185,11 @@ const getDoctorAppointments = async (req, res) => {
     }
 };
 
-// @desc    Cancel an appointment (Patient action)
-// @route   PUT /api/appointments/:id/cancel
+/**
+ * @desc    Cancel an existing appointment
+ * @route   PUT /api/appointments/:id/cancel
+ * @access  Private (Patient role required)
+ */
 const cancelAppointment = async (req, res) => {
     try {
         const appointment = await Appointment.findById(req.params.id);
@@ -123,15 +198,16 @@ const cancelAppointment = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Appointment not found' });
         }
 
+        // Security check: Ensure the patient attempting to cancel actually owns the appointment
         if (appointment.patientId !== req.user.id) {
             return res.status(403).json({ success: false, message: 'Not authorized to cancel this appointment' });
         }
 
+        // Business Logic: Prevent cancellation of finalized appointments
         if (appointment.status === 'Completed' || appointment.status === 'Cancelled') {
             return res.status(400).json({ success: false, message: 'Cannot cancel this appointment' });
         }
 
-        // Updated spelling to match new schema ('Cancelled' with two L's)
         appointment.status = 'Cancelled'; 
         await appointment.save();
 
@@ -146,11 +222,14 @@ const cancelAppointment = async (req, res) => {
     }
 };
 
-// @desc    Reschedule an appointment (Patient action)
-// @route   PUT /api/appointments/:id/reschedule
+/**
+ * @desc    Reschedule an existing appointment
+ * @route   PUT /api/appointments/:id/reschedule
+ * @access  Private (Patient role required)
+ */
 const rescheduleAppointment = async (req, res) => {
     try {
-        const { newAppointmentDate, newTimeSlot } = req.body; // Updated to newAppointmentDate
+        const { newAppointmentDate, newTimeSlot } = req.body; 
 
         if (!newAppointmentDate || !newTimeSlot) {
             return res.status(400).json({ success: false, message: 'Please provide new appointment date and time slot' });
@@ -159,10 +238,12 @@ const rescheduleAppointment = async (req, res) => {
         const existingAppointment = await Appointment.findById(req.params.id);
         if (!existingAppointment) return res.status(404).json({ success: false, message: 'Appointment not found' });
         
+        // Security check: Ensure ownership before modifying
         if (existingAppointment.patientId !== req.user.id) {
             return res.status(403).json({ success: false, message: 'Not authorized to reschedule this appointment' });
         }
 
+        // Apply new times and reset status to Pending for doctor re-approval
         const appointment = await Appointment.findByIdAndUpdate(
             req.params.id,
             { 
