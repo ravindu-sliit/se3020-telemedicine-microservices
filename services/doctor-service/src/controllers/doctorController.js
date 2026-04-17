@@ -1,7 +1,15 @@
+/**
+ * @file doctorController.js
+ * @description Handles core business logic for the Doctor Microservice, including
+ * profile management, administrative verification, prescription issuance, and 
+ * cross-service communication (fetching patient reports).
+ */
+
 const mongoose = require('mongoose');
 const axios = require('axios');
 const Doctor = require('../models/Doctor');
 
+// Define fields that a doctor is allowed to update themselves
 const editableDoctorFields = [
   'fullName',
   'specialty',
@@ -13,9 +21,11 @@ const editableDoctorFields = [
   'availability'
 ];
 
+// Configuration constants loaded from environment variables
 const DEFAULT_CONSULTATION_FEE = Number(process.env.DEFAULT_DOCTOR_FEE) || 100;
 const AUTH_SERVICE_BASE_URL = process.env.AUTH_SERVICE_BASE_URL || 'http://localhost:5001/api';
 
+// Default schedule provided to newly verified doctors
 const defaultAvailability = [
   { dayOfWeek: 'Monday', startTime: '09:00 AM', endTime: '05:00 PM' },
   { dayOfWeek: 'Tuesday', startTime: '09:00 AM', endTime: '05:00 PM' },
@@ -24,6 +34,11 @@ const defaultAvailability = [
   { dayOfWeek: 'Friday', startTime: '09:00 AM', endTime: '05:00 PM' }
 ];
 
+/**
+ * Utility: Ensures inputs intended as arrays (like qualifications) are correctly
+ * formatted as arrays of trimmed strings, handling edge cases where a client 
+ * might send a single string instead.
+ */
 const normalizeStringArray = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) {
@@ -32,6 +47,10 @@ const normalizeStringArray = (value) => {
   return [String(value).trim()].filter(Boolean);
 };
 
+/**
+ * Utility: Extracts and formats allowable fields from a request body
+ * to prevent NoSQL injection or mass assignment vulnerabilities.
+ */
 const buildDoctorPayload = (body) => ({
   fullName: body.fullName,
   specialty: body.specialty,
@@ -43,6 +62,10 @@ const buildDoctorPayload = (body) => ({
   availability: Array.isArray(body.availability) ? body.availability : []
 });
 
+/**
+ * Utility: Maps a user record from the Auth Service into the standard Doctor schema format.
+ * Used as a fallback when a user is verified in Auth but hasn't created a profile yet.
+ */
 const mapVerifiedUserToDoctor = (user) => ({
   _id: `auth-${user.id}`,
   userId: user.id,
@@ -58,6 +81,10 @@ const mapVerifiedUserToDoctor = (user) => ({
   isFromAuthFallback: true
 });
 
+/**
+ * Utility: Centralized error handler for database write operations.
+ * Specifically checks for MongoDB duplicate key errors (code 11000).
+ */
 const handleWriteError = (error, res, fallbackMessage) => {
   if (error?.code === 11000) {
     const duplicateField = Object.keys(error.keyPattern || {})[0];
@@ -75,10 +102,14 @@ const handleWriteError = (error, res, fallbackMessage) => {
   });
 };
 
+/**
+ * Utility: Helper function to validate MongoDB ObjectIds and fetch a doctor profile.
+ * Standardizes the 400/404 response logic across multiple admin endpoints.
+ */
 const getDoctorProfileByIdOrRespond = async (doctorId, res) => {
   if (!mongoose.Types.ObjectId.isValid(doctorId)) {
     res.status(400).json({ success: false, message: 'Invalid doctorId format' });
-    return null;
+    return null; // Return null signals the caller to halt execution
   }
 
   const doctorProfile = await Doctor.findById(doctorId);
@@ -90,6 +121,10 @@ const getDoctorProfileByIdOrRespond = async (doctorId, res) => {
   return doctorProfile;
 };
 
+/**
+ * Utility: Ensures a profile is currently 'pending' before allowing 
+ * state transitions like 'approve' or 'reject'.
+ */
 const ensurePendingReviewStatus = (doctorProfile, res, action) => {
   if (doctorProfile.verificationStatus !== 'pending') {
     res.status(409).json({
@@ -102,10 +137,20 @@ const ensurePendingReviewStatus = (doctorProfile, res, action) => {
   return true;
 };
 
+// ==========================================
+// DOCTOR ROUTES (Profile Management)
+// ==========================================
+
+/**
+ * @desc    Submit a new application to become a doctor
+ * @route   POST /api/doctors/apply
+ * @access  Private (Doctor role required)
+ */
 const applyDoctorProfile = async (req, res) => {
   try {
     const { specialty, medicalLicenseNumber, consultationFee } = req.body;
 
+    // Strict validation for required application fields
     if (!specialty || !medicalLicenseNumber || consultationFee === undefined || consultationFee === null) {
       return res.status(400).json({
         success: false,
@@ -113,6 +158,7 @@ const applyDoctorProfile = async (req, res) => {
       });
     }
 
+    // Ensure a user cannot submit multiple applications
     const existingProfile = await Doctor.findOne({ userId: req.user.id });
     if (existingProfile) {
       return res.status(409).json({
@@ -122,7 +168,7 @@ const applyDoctorProfile = async (req, res) => {
     }
 
     const doctorProfile = await Doctor.create({
-      userId: req.user.id,
+      userId: req.user.id, // Securely mapped from JWT token
       ...buildDoctorPayload(req.body),
       verificationStatus: 'pending',
       submittedAt: new Date()
@@ -138,6 +184,11 @@ const applyDoctorProfile = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Fetch the logged-in doctor's profile
+ * @route   GET /api/doctors/me
+ * @access  Private (Doctor role required)
+ */
 const getMyDoctorProfile = async (req, res) => {
   try {
     const doctorProfile = await Doctor.findOne({ userId: req.user.id });
@@ -163,6 +214,11 @@ const getMyDoctorProfile = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Update the logged-in doctor's profile
+ * @route   PUT /api/doctors/me
+ * @access  Private (Doctor role required)
+ */
 const updateMyDoctorProfile = async (req, res) => {
   try {
     const doctorProfile = await Doctor.findOne({ userId: req.user.id });
@@ -174,6 +230,7 @@ const updateMyDoctorProfile = async (req, res) => {
       });
     }
 
+    // Business Logic: Prevent updates if the application was rejected
     if (doctorProfile.verificationStatus === 'rejected') {
       return res.status(403).json({
         success: false,
@@ -181,6 +238,7 @@ const updateMyDoctorProfile = async (req, res) => {
       });
     }
 
+    // Safely apply updates only to allowed fields
     editableDoctorFields.forEach((field) => {
       if (field === 'qualifications' && Object.prototype.hasOwnProperty.call(req.body, field)) {
         doctorProfile[field] = normalizeStringArray(req.body[field]);
@@ -209,6 +267,15 @@ const updateMyDoctorProfile = async (req, res) => {
   }
 };
 
+// ==========================================
+// ADMIN ROUTES (Verification Flow)
+// ==========================================
+
+/**
+ * @desc    Fetch all applications waiting for admin approval
+ * @route   GET /api/doctors/pending
+ * @access  Private (Admin role required)
+ */
 const getPendingDoctorApplications = async (_req, res) => {
   try {
     const applications = await Doctor.find({ verificationStatus: 'pending' }).sort({ submittedAt: 1 });
@@ -227,8 +294,14 @@ const getPendingDoctorApplications = async (_req, res) => {
   }
 };
 
+/**
+ * @desc    Fetch all fully approved, active doctors (Combines local DB with Auth Service)
+ * @route   GET /api/doctors
+ * @access  Public / Patient
+ */
 const getAllApprovedDoctors = async (req, res) => {
   try {
+    // 1. Fetch locally completed profiles
     const approvedDoctors = await Doctor.find({
       verificationStatus: 'approved',
       isActive: true
@@ -236,6 +309,7 @@ const getAllApprovedDoctors = async (req, res) => {
 
     const doctorsByUserId = new Set(approvedDoctors.map((doctor) => String(doctor.userId)));
 
+    // 2. Fetch verified users from Auth Service to catch users who haven't completed profiles yet
     let verifiedUsers = [];
     try {
       const response = await axios.get(`${AUTH_SERVICE_BASE_URL}/auth/doctors/verified`, {
@@ -249,6 +323,7 @@ const getAllApprovedDoctors = async (req, res) => {
       verifiedUsers = [];
     }
 
+    // 3. Map Auth users to temporary Doctor objects if they don't exist locally
     const fallbackDoctors = verifiedUsers
       .filter((user) => !doctorsByUserId.has(String(user.id)))
       .map(mapVerifiedUserToDoctor);
@@ -269,6 +344,11 @@ const getAllApprovedDoctors = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Fetch a specific application by its Mongo ID
+ * @route   GET /api/doctors/:doctorId
+ * @access  Private (Admin role required)
+ */
 const getDoctorApplicationById = async (req, res) => {
   try {
     const doctorProfile = await getDoctorProfileByIdOrRespond(req.params.doctorId, res);
@@ -284,6 +364,11 @@ const getDoctorApplicationById = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Approve a pending application
+ * @route   PATCH /api/doctors/:doctorId/approve
+ * @access  Private (Admin role required)
+ */
 const approveDoctorApplication = async (req, res) => {
   try {
     const doctorProfile = await getDoctorProfileByIdOrRespond(req.params.doctorId, res);
@@ -296,7 +381,7 @@ const approveDoctorApplication = async (req, res) => {
     doctorProfile.verificationStatus = 'approved';
     doctorProfile.verificationNotes = req.body.verificationNotes || undefined;
     doctorProfile.verifiedAt = new Date();
-    doctorProfile.verifiedBy = req.user.id;
+    doctorProfile.verifiedBy = req.user.id; // Tracks which admin approved it
 
     await doctorProfile.save();
 
@@ -314,6 +399,11 @@ const approveDoctorApplication = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Reject a pending application
+ * @route   PATCH /api/doctors/:doctorId/reject
+ * @access  Private (Admin role required)
+ */
 const rejectDoctorApplication = async (req, res) => {
   try {
     const doctorProfile = await getDoctorProfileByIdOrRespond(req.params.doctorId, res);
@@ -344,11 +434,24 @@ const rejectDoctorApplication = async (req, res) => {
   }
 };
 
+// ==========================================
+// MEDICAL OPERATIONS (Cross-Service)
+// ==========================================
+
+/**
+ * @desc    Fetch medical reports for a specific patient
+ * @route   GET /api/doctors/patients/:patientId/reports
+ * @access  Private (Doctor role required)
+ * @note    This relies on cross-service communication to the Patient Service
+ */
 const getPatientReports = async (req, res) => {
   try {
     const { patientId } = req.params;
+    
+    // Hardcoded URL pointing to Patient Microservice (typically defined in .env)
     const patientServiceURL = `http://localhost:5004/api/patients/reports/${patientId}`;
 
+    // Pass the Doctor's JWT token along so the Patient Service trusts the request
     const config = {
       headers: {
         Authorization: req.headers.authorization
@@ -378,6 +481,11 @@ const getPatientReports = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Issue a digital prescription to a patient
+ * @route   POST /api/doctors/prescriptions
+ * @access  Private (Doctor role required)
+ */
 const issuePrescription = async (req, res) => {
   try {
     const { patientId, prescriptionText } = req.body;
@@ -389,6 +497,7 @@ const issuePrescription = async (req, res) => {
       });
     }
 
+    // Security: Find doctor by JWT token, ensuring they are active and approved
     const doctor = await Doctor.findOneAndUpdate(
       { userId: req.user.id, isActive: true, verificationStatus: 'approved' },
       {
@@ -426,8 +535,14 @@ const issuePrescription = async (req, res) => {
   }
 };
 
+/**
+ * @desc    Disable a doctor's profile (Soft Delete)
+ * @route   PUT /api/doctors/disable
+ * @access  Private (Doctor role required)
+ */
 const disableDoctorProfile = async (req, res) => {
   try {
+    // Sets isActive to false and clears availability so patients can't book them
     const doctor = await Doctor.findOneAndUpdate(
       { userId: req.user.id },
       {
