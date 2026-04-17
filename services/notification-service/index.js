@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-// const twilio = require('twilio');
+const twilio = require('twilio');
 const nodemailer = require('nodemailer');
 const dns = require('dns');
 
@@ -12,17 +12,20 @@ const PORT = Number(process.env.PORT) || 5007;
 const EMAIL_SEND_TIMEOUT_MS = Number(process.env.EMAIL_SEND_TIMEOUT_MS) || 15000;
 const EMAIL_PROVIDER = (process.env.EMAIL_PROVIDER || 'auto').toLowerCase();
 const EMAIL_FROM = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+const TWILIO_FROM_NUMBER =
+  process.env.TWILIO_PHONE_NUMBER ||
+  process.env.TWILIO_PHONE_NUMBER_FROM ||
+  process.env.TWILIO_PHONE_NUMBER_FRom;
 const APP_NAME = 'Smart Healthcare Telemedicine';
 const APP_URL = process.env.APP_URL || 'http://smart-healthcare.local';
 
 app.use(express.json());
 app.use(cors());
 
-// Twilio notification path is intentionally disabled.
-// const hasTwilioCredentials =
-//   Boolean(process.env.TWILIO_ACCOUNT_SID) &&
-//   Boolean(process.env.TWILIO_AUTH_TOKEN) &&
-//   Boolean(process.env.TWILIO_PHONE_NUMBER);
+const hasTwilioCredentials =
+  Boolean(process.env.TWILIO_ACCOUNT_SID) &&
+  Boolean(process.env.TWILIO_AUTH_TOKEN) &&
+  Boolean(TWILIO_FROM_NUMBER);
 
 const hasEmailCredentials =
   Boolean(process.env.EMAIL_USER) &&
@@ -90,9 +93,27 @@ const renderNotificationEmail = ({ headline, message }) => {
 </html>`;
 };
 
-// const twilioClient = hasTwilioCredentials
-//   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
-//   : null;
+const twilioClient = hasTwilioCredentials
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
+
+const sendSmsWithTwilio = async ({ to, message }) => {
+  if (!twilioClient) {
+    throw new Error('Twilio credentials are not configured');
+  }
+
+  const response = await twilioClient.messages.create({
+    to,
+    from: TWILIO_FROM_NUMBER,
+    body: message
+  });
+
+  return {
+    provider: 'twilio',
+    sid: response?.sid || null,
+    status: response?.status || null
+  };
+};
 
 const createEmailTransporter = async () => {
   if (!hasEmailCredentials) {
@@ -238,13 +259,14 @@ app.get('/api/health', (_req, res) => {
     success: true,
     message: 'Notification service is running',
     channels: {
-      sms: 'disabled',
+      sms: hasTwilioCredentials ? 'configured' : 'not-configured',
       email: hasEmailCredentials || hasSendGridCredentials ? 'configured' : 'not-configured'
     },
     providers: {
       selected: EMAIL_PROVIDER,
       sendgrid: hasSendGridCredentials ? 'configured' : 'not-configured',
-      smtp: hasEmailCredentials ? 'configured' : 'not-configured'
+      smtp: hasEmailCredentials ? 'configured' : 'not-configured',
+      twilio: hasTwilioCredentials ? 'configured' : 'not-configured'
     }
   });
 });
@@ -254,28 +276,29 @@ app.get('/api/notifications/health', (_req, res) => {
     success: true,
     message: 'Notification service is running',
     channels: {
-      sms: 'disabled',
+      sms: hasTwilioCredentials ? 'configured' : 'not-configured',
       email: hasEmailCredentials || hasSendGridCredentials ? 'configured' : 'not-configured'
     },
     providers: {
       selected: EMAIL_PROVIDER,
       sendgrid: hasSendGridCredentials ? 'configured' : 'not-configured',
-      smtp: hasEmailCredentials ? 'configured' : 'not-configured'
+      smtp: hasEmailCredentials ? 'configured' : 'not-configured',
+      twilio: hasTwilioCredentials ? 'configured' : 'not-configured'
     }
   });
 });
 
 app.post('/api/notifications/send', async (req, res) => {
   try {
-    const { patientEmail, message } = req.body;
+    const { patientEmail, patientPhone, message } = req.body;
 
-    if (!message || !patientEmail) {
+    if (!message || (!patientEmail && !patientPhone)) {
       return res.status(400).json({
-        error: 'Message and patientEmail are required.'
+        error: 'Message and at least one recipient (patientEmail or patientPhone) are required.'
       });
     }
 
-    if (!hasEmailCredentials && !hasSendGridCredentials) {
+    if (!hasEmailCredentials && !hasSendGridCredentials && !hasTwilioCredentials) {
       return res.status(200).json({
         success: true,
         message: 'Notifications processed in mock mode.',
@@ -285,62 +308,108 @@ app.post('/api/notifications/send', async (req, res) => {
             channel: 'email',
             status: 'skipped',
             reason: 'Email credentials are not configured.'
+          },
+          {
+            channel: 'sms',
+            status: 'skipped',
+            reason: 'Twilio credentials are not configured.'
           }
         ]
       });
     }
 
-    let emailResult = null;
+    const results = [];
     const subject = 'Payment & Appointment Confirmation';
     const html = renderNotificationEmail({
       headline: 'Your Payment Was Successful',
       message
     });
 
-    if (EMAIL_PROVIDER === 'sendgrid' || (EMAIL_PROVIDER === 'auto' && hasSendGridCredentials)) {
-      emailResult = await sendEmailWithSendGrid({
-        to: patientEmail,
-        subject,
-        text: message,
-        html
-      });
-    } else {
-      const emailTransporter = await createEmailTransporter();
-      if (!emailTransporter) {
-        return res.status(200).json({
-          success: true,
-          message: 'Notifications processed in mock mode.',
-          mode: 'mock',
-          results: [
-            {
-              channel: 'email',
-              status: 'skipped',
-              reason: 'Email credentials are not configured.'
-            }
-          ]
+    if (patientEmail) {
+      try {
+        let emailResult = null;
+        if (EMAIL_PROVIDER === 'sendgrid' || (EMAIL_PROVIDER === 'auto' && hasSendGridCredentials)) {
+          emailResult = await sendEmailWithSendGrid({
+            to: patientEmail,
+            subject,
+            text: message,
+            html
+          });
+        } else {
+          const emailTransporter = await createEmailTransporter();
+          if (emailTransporter) {
+            emailResult = await sendEmailWithFallback({
+              to: patientEmail,
+              subject,
+              text: message,
+              html
+            });
+          }
+        }
+
+        if (emailResult) {
+          results.push({
+            channel: 'email',
+            status: 'sent',
+            provider: emailResult.provider || 'smtp',
+            messageId: emailResult.messageId || null
+          });
+        } else {
+          results.push({
+            channel: 'email',
+            status: 'skipped',
+            reason: 'Email credentials are not configured.'
+          });
+        }
+      } catch (emailError) {
+        results.push({
+          channel: 'email',
+          status: 'failed',
+          reason: emailError?.message || 'Unknown email delivery error'
         });
       }
-
-      emailResult = await sendEmailWithFallback({
-        to: patientEmail,
-        subject,
-        text: message,
-        html
-      });
     }
+
+    if (patientPhone) {
+      if (!hasTwilioCredentials) {
+        results.push({
+          channel: 'sms',
+          status: 'skipped',
+          reason: 'Twilio credentials are not configured.'
+        });
+      } else {
+        try {
+          const smsResult = await sendSmsWithTwilio({
+            to: patientPhone,
+            message
+          });
+
+          results.push({
+            channel: 'sms',
+            status: 'sent',
+            provider: smsResult.provider,
+            sid: smsResult.sid,
+            deliveryStatus: smsResult.status
+          });
+        } catch (smsError) {
+          results.push({
+            channel: 'sms',
+            status: 'failed',
+            reason: smsError?.message || 'Unknown SMS delivery error'
+          });
+        }
+      }
+    }
+
+    const hasFailures = results.some((entry) => entry.status === 'failed');
 
     return res.status(200).json({
       success: true,
-      message: 'Notifications processed.',
-      mode: EMAIL_PROVIDER,
-      results: [
-        {
-          channel: 'email',
-          status: 'sent',
-          provider: emailResult.provider || 'smtp',
-          messageId: emailResult.messageId || null
-        }
-      ]
+      message: hasFailures
+        ? 'Notifications processed with delivery issues.'
+        : 'Notifications processed.',
+      mode: hasFailures ? 'degraded' : EMAIL_PROVIDER,
+      results
     });
   } catch (error) {
     console.error('Notification Service Error:', {

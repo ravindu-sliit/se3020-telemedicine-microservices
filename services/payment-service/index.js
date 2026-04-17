@@ -24,7 +24,7 @@ app.get('/api/health', (_req, res) => {
 
 app.post('/api/payments/checkout', async (req, res) => {
   try {
-    const { appointmentId, amount, currency = 'usd', patientEmail } = req.body;
+    const { appointmentId, amount, currency = 'usd', patientEmail, patientPhone } = req.body;
 
     if (!appointmentId || amount === undefined || amount === null) {
       return res.status(400).json({
@@ -70,7 +70,8 @@ app.post('/api/payments/checkout', async (req, res) => {
       cancel_url: cancelUrl,
       metadata: {
         appointmentId,
-        patientEmail: patientEmail || ''
+        patientEmail: patientEmail || '',
+        patientPhone: patientPhone || ''
       },
       ...(patientEmail ? { customer_email: patientEmail } : {}),
       line_items: [
@@ -150,13 +151,14 @@ app.post('/api/payments/confirm', async (req, res) => {
       checkoutSession?.customer_email ||
       checkoutSession?.metadata?.patientEmail ||
       '';
+    const recipientPhone = checkoutSession?.metadata?.patientPhone || '';
 
-    if (!recipientEmail) {
+    if (!recipientEmail && !recipientPhone) {
       return res.status(200).json({
         success: true,
         paid: true,
         notified: false,
-        message: 'Payment confirmed, but no recipient email found.'
+        message: 'Payment confirmed, but no recipient contact details found.'
       });
     }
 
@@ -167,6 +169,7 @@ app.post('/api/payments/confirm', async (req, res) => {
       },
       body: JSON.stringify({
         patientEmail: recipientEmail,
+        patientPhone: recipientPhone,
         message: `Payment completed successfully for appointment ${checkoutSession?.metadata?.appointmentId || 'N/A'}.`
       })
     });
@@ -178,6 +181,7 @@ app.post('/api/payments/confirm', async (req, res) => {
       paid: true,
       notified: notificationResponse.ok,
       recipientEmail,
+      recipientPhone,
       notification: notificationPayload
     });
   } catch (error) {

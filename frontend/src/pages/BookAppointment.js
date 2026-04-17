@@ -7,7 +7,12 @@ import {
 } from '@heroicons/react/24/outline';
 import Navbar from '../components/Navbar';
 import { getSession } from '../services/session';
-import { fetchAllDoctors, createAppointment, createCheckoutSession } from '../services/api';
+import {
+  fetchAllDoctors,
+  fetchPatientProfile,
+  createAppointment,
+  createCheckoutSession
+} from '../services/api';
 
 const getDoctorDisplayName = (doctor) => doctor?.userId?.fullName || doctor?.fullName || doctor?.name || 'Doctor';
 const getDoctorSpecialty = (doctor) => doctor?.specialty || 'General Medicine';
@@ -29,6 +34,7 @@ const BookAppointment = () => {
   const [bookingInProgress, setBookingInProgress] = useState(false);
   const [bookingError, setBookingError] = useState('');
   const [lastAppointment, setLastAppointment] = useState(null);
+  const [patientPhone, setPatientPhone] = useState('');
 
   const [doctors, setDoctors] = useState([]);
   const [doctorsLoading, setDoctorsLoading] = useState(true);
@@ -51,6 +57,25 @@ const BookAppointment = () => {
     };
     loadDoctors();
   }, []);
+
+  useEffect(() => {
+    const loadPatientPhone = async () => {
+      const userId = session?.user?._id || session?.user?.id;
+      if (!userId) return;
+
+      try {
+        const response = await fetchPatientProfile(userId);
+        const profilePhone = response?.data?.phone || '';
+        if (profilePhone) {
+          setPatientPhone(profilePhone);
+        }
+      } catch (_error) {
+        setPatientPhone('');
+      }
+    };
+
+    loadPatientPhone();
+  }, [session?.user?._id, session?.user?.id]);
 
   // Generate next 7 days dynamically
   const availableDates = useMemo(() => {
@@ -160,7 +185,8 @@ const BookAppointment = () => {
           appointmentId,
           amount: totalAmount,
           currency: 'usd',
-          patientEmail: session?.user?.email || ''
+          patientEmail: session?.user?.email || '',
+          patientPhone: patientPhone?.trim() || ''
         });
         checkoutUrl = paymentResponse?.checkoutUrl || '';
       }
@@ -389,10 +415,21 @@ const BookAppointment = () => {
             </div>
           )}
           <div style={{ marginTop: 20 }}>
-            <div className="form-group"><label className="form-label">Card Number</label><input type="text" placeholder="1234 5678 9012 3456" className="form-input" /></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="form-group"><label className="form-label">Expiry</label><input type="text" placeholder="MM/YY" className="form-input" /></div>
-              <div className="form-group"><label className="form-label">CVV</label><input type="text" placeholder="123" className="form-input" /></div>
+            <div className="form-group">
+              <label className="form-label">Phone Number for SMS Updates</label>
+              <input
+                type="tel"
+                placeholder="e.g. +94718582821"
+                className="form-input"
+                value={patientPhone}
+                onChange={(event) => setPatientPhone(event.target.value)}
+              />
+              <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: 6 }}>
+                You can change this number here for this checkout.
+              </div>
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)', background: 'var(--gray-50)', borderRadius: 10, padding: 10 }}>
+              Card details will be entered securely on the Stripe checkout page.
             </div>
           </div>
         </div>
