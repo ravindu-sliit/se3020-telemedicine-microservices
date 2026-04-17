@@ -5,6 +5,9 @@ dotenv.config();
 const app = require('./app');
 const connectDB = require('./config/db');
 const env = require('./config/env');
+const dns = require('dns');
+
+dns.setServers(["1.1.1.1","8.8.8.8"]);
 
 const PORT = env.port;
 

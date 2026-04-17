@@ -1,20 +1,27 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarIcon, UserIcon, DocumentTextIcon, ChatBubbleLeftRightIcon,
-  BellIcon, HeartIcon
+  BellIcon, HeartIcon, VideoCameraIcon
 } from '@heroicons/react/24/outline';
 import Navbar from '../components/Navbar';
-import { fetchPatientAppointments } from '../services/api';
+import { fetchPatientAppointments, cancelAppointment, rescheduleAppointment } from '../services/api';
 import { getSession } from '../services/session';
 
 const Patient = () => {
   const session = getSession();
   const userName = session?.user?.fullName || 'Patient';
+  const navigate = useNavigate();
 
   const [appointments, setAppointments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [actionState, setActionState] = useState({ id: '', action: '' });
+  const [actionFeedback, setActionFeedback] = useState({ type: '', message: '' });
+  
+  // Reschedule State
+  const [rescheduleId, setRescheduleId] = useState('');
+  const [rescheduleForm, setRescheduleForm] = useState({ newAppointmentDate: '', newTimeSlot: '' });
 
   const loadAppointments = useCallback(async () => {
     setIsLoading(true);
@@ -35,7 +42,61 @@ const Patient = () => {
     loadAppointments();
   }, [loadAppointments]);
 
-  const upcomingCount = appointments.filter(a => a.status === 'confirmed' || a.status === 'pending').length;
+  const handleCancel = async (id) => {
+    setActionState({ id, action: 'cancel' });
+    setActionFeedback({ type: '', message: '' });
+    try {
+      await cancelAppointment(id);
+      setActionFeedback({ type: 'success', message: 'Appointment cancelled successfully.' });
+      await loadAppointments();
+    } catch (error) {
+      setActionFeedback({ type: 'error', message: error.message || 'Failed to cancel appointment.' });
+    } finally {
+      setActionState({ id: '', action: '' });
+    }
+  };
+
+  const openReschedule = (apt) => {
+    setRescheduleId(apt._id);
+    setRescheduleForm({
+      newAppointmentDate: apt.appointmentDate ? apt.appointmentDate.slice(0, 10) : '',
+      newTimeSlot: apt.timeSlot || ''
+    });
+    setActionFeedback({ type: '', message: '' });
+  };
+
+  const handleReschedule = async (e) => {
+    e.preventDefault();
+    if (!rescheduleId) return;
+    setActionState({ id: rescheduleId, action: 'reschedule' });
+    setActionFeedback({ type: '', message: '' });
+    try {
+      const iso = rescheduleForm.newAppointmentDate
+        ? new Date(`${rescheduleForm.newAppointmentDate}T00:00:00.000Z`).toISOString()
+        : '';
+      await rescheduleAppointment(rescheduleId, {
+        newAppointmentDate: iso,
+        newTimeSlot: rescheduleForm.newTimeSlot
+      });
+      setActionFeedback({ type: 'success', message: 'Appointment rescheduled successfully.' });
+      setRescheduleId('');
+      setRescheduleForm({ newAppointmentDate: '', newTimeSlot: '' });
+      await loadAppointments();
+    } catch (error) {
+      setActionFeedback({ type: 'error', message: error.message || 'Failed to reschedule appointment.' });
+    } finally {
+      setActionState({ id: '', action: '' });
+    }
+  };
+
+  const handleJoinMeeting = (appointment) => {
+    if (!appointment?.videoMeetingUrl) return;
+    navigate('/telemedicine-room', {
+      state: { appointment }
+    });
+  };
+
+  const upcomingCount = appointments.filter(a => a.status === 'Confirmed' || a.status === 'Pending').length;
 
   const renderDashboard = () => (
     <div>
@@ -44,7 +105,7 @@ const Patient = () => {
         {[
           { label: 'Upcoming', value: String(upcomingCount), color: '#4f46e5', bg: '#eef2ff', icon: CalendarIcon },
           { label: 'Total Bookings', value: String(appointments.length), color: '#10b981', bg: '#ecfdf5', icon: DocumentTextIcon },
-          { label: 'Consultations', value: appointments.filter(a => a.status === 'confirmed').length.toString(), color: '#0ea5e9', bg: '#f0f9ff', icon: ChatBubbleLeftRightIcon },
+          { label: 'Consultations', value: appointments.filter(a => a.status === 'Confirmed').length.toString(), color: '#0ea5e9', bg: '#f0f9ff', icon: ChatBubbleLeftRightIcon },
           { label: 'Health Score', value: '92%', color: '#f59e0b', bg: '#fffbeb', icon: HeartIcon },
         ].map((stat, i) => {
           const Icon = stat.icon;
@@ -69,6 +130,18 @@ const Patient = () => {
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>Upcoming Appointments</h3>
             <Link to="/patient/book-appointment" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary-600)' }}>Book New</Link>
           </div>
+          
+          {actionFeedback.message && (
+            <div style={{
+              marginBottom: 12, padding: '10px 12px', borderRadius: 10, fontSize: '0.85rem',
+              background: actionFeedback.type === 'success' ? '#f0fdf4' : '#fef2f2',
+              color: actionFeedback.type === 'success' ? '#166534' : '#b91c1c',
+              border: `1px solid ${actionFeedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`
+            }}>
+              {actionFeedback.message}
+            </div>
+          )}
+
           {isLoading ? (
             <div className="loading-state">Loading appointments...</div>
           ) : loadError ? (
@@ -78,24 +151,93 @@ const Patient = () => {
               No appointments yet. <Link to="/patient/book-appointment" style={{ color: 'var(--primary-600)', fontWeight: 600 }}>Book one now</Link>
             </div>
           ) : (
-            appointments.slice(0, 4).map((apt, idx) => (
-              <div key={apt._id || idx} className="item-row">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <UserIcon style={{ width: 20, height: 20, color: 'var(--primary-600)' }} />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)', marginBottom: 2 }}>
-                      {apt.doctorId?.name || apt.doctorName || 'Doctor'}
+            appointments.slice(0, 4).map((apt, idx) => {
+              const status = (apt.status || '').toLowerCase();
+              const canModify = status === 'pending' || status === 'confirmed';
+              const isRescheduling = rescheduleId === apt._id;
+              
+              return (
+                <div key={apt._id || idx} style={{ borderBottom: '1px solid var(--gray-100)', paddingBottom: 12, marginBottom: 12 }}>
+                  <div className="item-row" style={{ borderBottom: 'none', paddingBottom: 0, marginBottom: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <UserIcon style={{ width: 20, height: 20, color: 'var(--primary-600)' }} />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)', marginBottom: 2 }}>
+                          {apt.doctorId?.fullName || apt.doctorId?.name || apt.doctorName || 'Doctor'}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                          {apt.specialty || apt.doctorId?.specialty || 'General'} • {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : 'TBD'} {apt.timeSlot && `at ${apt.timeSlot}`}
+                        </div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
-                      {apt.specialty || apt.doctorId?.specialty || 'General'} • {apt.date ? new Date(apt.date).toLocaleDateString() : 'TBD'} {apt.time && `at ${apt.time}`}
-                    </div>
+                    <span className={`status ${status === 'confirmed' ? 'status-confirmed' : status === 'cancelled' ? 'status-inactive' : 'status-pending'}`}>
+                      {apt.status || 'pending'}
+                    </span>
                   </div>
+                  
+                  {/* Action Buttons */}
+                  {canModify && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
+                      {status === 'confirmed' && apt.videoMeetingUrl && (
+                        <button
+                          className="btn btn-success btn-sm"
+                          onClick={() => handleJoinMeeting(apt)}
+                          style={{ marginRight: 'auto' }}
+                        >
+                          <VideoCameraIcon style={{ width: 14, height: 14 }} /> Join Call
+                        </button>
+                      )}
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => (isRescheduling ? setRescheduleId('') : openReschedule(apt))}
+                        disabled={actionState.id === apt._id}
+                      >
+                        {isRescheduling ? 'Close' : 'Reschedule'}
+                      </button>
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => handleCancel(apt._id)}
+                        disabled={actionState.id === apt._id}
+                      >
+                        {actionState.id === apt._id && actionState.action === 'cancel' ? 'Cancelling...' : 'Cancel'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Reschedule Form */}
+                  {isRescheduling && (
+                    <form onSubmit={handleReschedule} style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={rescheduleForm.newAppointmentDate}
+                        onChange={(e) => setRescheduleForm(cur => ({ ...cur, newAppointmentDate: e.target.value }))}
+                        required
+                        style={{ padding: '8px', minHeight: 'auto', flex: '1 1 140px' }}
+                      />
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="HH:MM (e.g. 09:00)"
+                        value={rescheduleForm.newTimeSlot}
+                        onChange={(e) => setRescheduleForm(cur => ({ ...cur, newTimeSlot: e.target.value }))}
+                        required
+                        style={{ padding: '8px', minHeight: 'auto', flex: '1 1 120px' }}
+                      />
+                      <button
+                        type="submit"
+                        className="btn btn-primary btn-sm"
+                        disabled={actionState.id === apt._id && actionState.action === 'reschedule'}
+                      >
+                        {actionState.id === apt._id && actionState.action === 'reschedule' ? 'Saving...' : 'Confirm'}
+                      </button>
+                    </form>
+                  )}
                 </div>
-                <span className={`status ${apt.status === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status || 'pending'}</span>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
@@ -114,10 +256,10 @@ const Patient = () => {
                 marginBottom: 10, border: '1px solid var(--gray-100)'
               }}>
                 <p style={{ fontSize: '0.85rem', color: 'var(--gray-700)', marginBottom: 4 }}>
-                  Appointment {apt.status === 'confirmed' ? 'confirmed' : 'pending'} with {apt.doctorId?.name || 'your doctor'}
+                  Appointment {apt.status === 'Confirmed' ? 'confirmed' : 'pending'} with {apt.doctorId?.name || 'your doctor'}
                 </p>
                 <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>
-                  {apt.date ? new Date(apt.date).toLocaleDateString() : ''}
+                  {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : ''}
                 </span>
               </div>
             ))

@@ -1,7 +1,13 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
-import { createPatientProfile, fetchPatientProfile, updatePatientProfile } from '../services/api';
+import { 
+  createPatientProfile, 
+  fetchPatientProfile, 
+  updatePatientProfile,
+  uploadMedicalReport 
+} from '../services/api';
 import { getSession } from '../services/session';
+import { DocumentArrowUpIcon } from '@heroicons/react/24/outline';
 
 const emptyProfile = {
   phone: '',
@@ -10,18 +16,8 @@ const emptyProfile = {
   bloodGroup: '',
   allergies: '',
   chronicConditions: '',
-  address: {
-    street: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    country: ''
-  },
-  emergencyContact: {
-    name: '',
-    relationship: '',
-    phone: ''
-  }
+  address: { street: '', city: '', state: '', postalCode: '', country: '' },
+  emergencyContact: { name: '', relationship: '', phone: '' }
 };
 
 const mapProfileToForm = (profile) => ({
@@ -46,10 +42,7 @@ const mapProfileToForm = (profile) => ({
 });
 
 const splitCsv = (value) =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
+  value.split(',').map((item) => item.trim()).filter(Boolean);
 
 const PatientProfile = () => {
   const session = React.useMemo(() => getSession(), []);
@@ -58,6 +51,14 @@ const PatientProfile = () => {
   const [isSaving, setIsSaving] = React.useState(false);
   const [hasExistingProfile, setHasExistingProfile] = React.useState(false);
   const [feedback, setFeedback] = React.useState({ type: '', message: '' });
+
+  // Medical Report Upload State
+  const fileInputRef = useRef(null);
+  const [reportFile, setReportFile] = useState(null);
+  const [reportType, setReportType] = useState('Blood Test');
+  const [reportNotes, setReportNotes] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadFeedback, setUploadFeedback] = useState({ type: '', message: '' });
 
   React.useEffect(() => {
     const loadProfile = async () => {
@@ -94,10 +95,7 @@ const PatientProfile = () => {
     const { name, value } = event.target;
     setForm((current) => ({
       ...current,
-      [section]: {
-        ...current[section],
-        [name]: value
-      }
+      [section]: { ...current[section], [name]: value }
     }));
   };
 
@@ -136,6 +134,37 @@ const PatientProfile = () => {
     }
   };
 
+  const handleReportUpload = async (event) => {
+    event.preventDefault();
+    if (!reportFile) {
+      setUploadFeedback({ type: 'error', message: 'Please select a file to upload.' });
+      return;
+    }
+
+    setIsUploading(true);
+    setUploadFeedback({ type: '', message: '' });
+
+    const formData = new FormData();
+    formData.append('file', reportFile);
+    formData.append('reportType', reportType);
+    formData.append('notes', reportNotes);
+
+    try {
+      await uploadMedicalReport(session.user.id, formData);
+      setUploadFeedback({ type: 'success', message: 'Medical report uploaded successfully!' });
+      
+      // Reset form
+      setReportFile(null);
+      setReportNotes('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      
+    } catch (error) {
+      setUploadFeedback({ type: 'error', message: error.message || 'Failed to upload report.' });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <div className="page-wrapper">
       <Navbar />
@@ -144,42 +173,14 @@ const PatientProfile = () => {
           <div className="dashboard-header animate-fade-in-up">
             <h1 className="dashboard-title">Patient Profile</h1>
             <p className="dashboard-subtitle" style={{ marginBottom: 0 }}>
-              Your details are saved in `patient-service` and linked to your auth account.
+              Your details are saved securely and linked to your account.
             </p>
           </div>
 
           <div className="card animate-fade-in-up delay-100" style={{ padding: 28 }}>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1.2fr 1.8fr',
-                gap: 24,
-                marginBottom: 24
-              }}
-            >
-              <div
-                style={{
-                  borderRadius: 24,
-                  padding: 24,
-                  background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)',
-                  border: '1px solid #dbeafe'
-                }}
-              >
-                <div
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 18,
-                    background: '#2563eb',
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '1.4rem',
-                    fontWeight: 800,
-                    marginBottom: 16
-                  }}
-                >
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: 24, marginBottom: 24 }}>
+              <div style={{ borderRadius: 24, padding: 24, background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)', border: '1px solid #dbeafe' }}>
+                <div style={{ width: 64, height: 64, borderRadius: 18, background: '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', fontWeight: 800, marginBottom: 16 }}>
                   {(session?.user?.fullName || 'P').slice(0, 1).toUpperCase()}
                 </div>
                 <h2 style={{ marginBottom: 8, fontSize: '1.35rem', fontWeight: 800 }}>{session?.user?.fullName || 'Guest'}</h2>
@@ -189,36 +190,65 @@ const PatientProfile = () => {
                 </div>
               </div>
 
-              <div
-                style={{
-                  borderRadius: 24,
-                  padding: 24,
-                  background: '#fff7ed',
-                  border: '1px solid #fed7aa'
-                }}
-              >
-                <h3 style={{ marginBottom: 10, fontSize: '1rem', fontWeight: 800 }}>How this page works</h3>
-                <p style={{ color: 'var(--gray-600)', lineHeight: 1.7, marginBottom: 0 }}>
-                  The form uses your auth token from `auth-service`, then creates or updates the matching patient
-                  record in `patient-service` using the same `userId`.
-                </p>
-              </div>
+              {/* Document Upload Section */}
+              {hasExistingProfile ? (
+                <div style={{ borderRadius: 24, padding: 24, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                    <DocumentArrowUpIcon style={{ width: 24, height: 24, color: '#166534' }} />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#166534' }}>Upload Medical Report</h3>
+                  </div>
+                  
+                  {uploadFeedback.message && (
+                    <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, fontSize: '0.85rem', background: uploadFeedback.type === 'success' ? '#dcfce7' : '#fee2e2', color: uploadFeedback.type === 'success' ? '#166534' : '#991b1b' }}>
+                      {uploadFeedback.message}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleReportUpload}>
+                    <div className="grid grid-cols-2 gap-3" style={{ marginBottom: 12 }}>
+                      <select className="input" value={reportType} onChange={(e) => setReportType(e.target.value)}>
+                        <option value="Blood Test">Blood Test</option>
+                        <option value="X-Ray">X-Ray</option>
+                        <option value="MRI">MRI Scan</option>
+                        <option value="Prescription">Prescription</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <input 
+                        type="file" 
+                        ref={fileInputRef}
+                        accept=".pdf,.jpg,.jpeg,.png"
+                        onChange={(e) => setReportFile(e.target.files[0])}
+                        style={{ padding: '8px', fontSize: '0.85rem' }} 
+                      />
+                    </div>
+                    <input 
+                      type="text" 
+                      placeholder="Add brief notes (e.g., 'Routine fasting check')" 
+                      className="input" 
+                      value={reportNotes} 
+                      onChange={(e) => setReportNotes(e.target.value)} 
+                      style={{ marginBottom: 12 }} 
+                    />
+                    <button type="submit" disabled={isUploading || !reportFile} className="btn btn-primary btn-sm w-full">
+                      {isUploading ? 'Uploading...' : 'Upload Document'}
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <div style={{ borderRadius: 24, padding: 24, background: '#fff7ed', border: '1px solid #fed7aa' }}>
+                  <h3 style={{ marginBottom: 10, fontSize: '1rem', fontWeight: 800 }}>Complete Your Profile</h3>
+                  <p style={{ color: 'var(--gray-600)', lineHeight: 1.7, marginBottom: 0 }}>
+                    Please fill out and save your patient profile information below before you can upload medical reports.
+                  </p>
+                </div>
+              )}
             </div>
 
-            {feedback.message ? (
-              <div
-                style={{
-                  marginBottom: 20,
-                  padding: '12px 14px',
-                  borderRadius: 14,
-                  border: `1px solid ${feedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
-                  background: feedback.type === 'success' ? '#f0fdf4' : '#fef2f2',
-                  color: feedback.type === 'success' ? '#166534' : '#b91c1c'
-                }}
-              >
+            {feedback.message && (
+              <div style={{ marginBottom: 20, padding: '12px 14px', borderRadius: 14, border: `1px solid ${feedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`, background: feedback.type === 'success' ? '#f0fdf4' : '#fef2f2', color: feedback.type === 'success' ? '#166534' : '#b91c1c' }}>
                 {feedback.message}
               </div>
-            ) : null}
+            )}
 
             {isLoading ? (
               <p style={{ margin: 0, color: 'var(--gray-500)' }}>Loading patient profile...</p>
@@ -248,31 +278,17 @@ const PatientProfile = () => {
                     <select className="input" name="bloodGroup" value={form.bloodGroup} onChange={updateField}>
                       <option value="">Select blood group</option>
                       {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((group) => (
-                        <option key={group} value={group}>
-                          {group}
-                        </option>
+                        <option key={group} value={group}>{group}</option>
                       ))}
                     </select>
                   </label>
                   <label>
                     <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: 8 }}>Allergies</div>
-                    <input
-                      className="input"
-                      name="allergies"
-                      value={form.allergies}
-                      onChange={updateField}
-                      placeholder="Comma separated values"
-                    />
+                    <input className="input" name="allergies" value={form.allergies} onChange={updateField} placeholder="Comma separated values" />
                   </label>
                   <label>
                     <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: 8 }}>Chronic Conditions</div>
-                    <input
-                      className="input"
-                      name="chronicConditions"
-                      value={form.chronicConditions}
-                      onChange={updateField}
-                      placeholder="Comma separated values"
-                    />
+                    <input className="input" name="chronicConditions" value={form.chronicConditions} onChange={updateField} placeholder="Comma separated values" />
                   </label>
                 </div>
 

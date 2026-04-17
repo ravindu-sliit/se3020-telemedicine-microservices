@@ -106,7 +106,7 @@ const BookAppointment = () => {
       '05:00 PM','05:30 PM','06:00 PM','06:30 PM','07:00 PM','07:30 PM'
     ];
 
-    if (dayAvail.length === 0) return baseSlots;
+    //if (dayAvail.length === 0) return baseSlots;
 
     const timeToNumber = (tStr) => {
        if (!tStr || typeof tStr !== 'string') return null;

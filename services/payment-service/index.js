@@ -2,6 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const Stripe = require('stripe');
+const dns = require('dns');
+
+dns.setServers(["1.1.1.1","8.8.8.8"]);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 5006;
