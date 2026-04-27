@@ -35,3 +35,9 @@ spec:
               value: "http://smart-healthcare.local"
             - name: PORT
               value: "5003"
+            - name: AUTH_SERVICE_BASE_URL
+              value: "http://auth-service:5001/api"
+            - name: PATIENT_SERVICE_BASE_URL
+              value: "http://patient-service:5002/api"
+            - name: NOTIFICATION_API_URL
+              value: "http://notification-service:5007/api/notifications/send"
