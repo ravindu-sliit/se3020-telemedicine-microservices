@@ -6,6 +6,7 @@
  */
 
 const Appointment = require('../models/Appointment');
+const { sendAppointmentNotifications } = require('../utils/appointmentNotifications');
 
 const TELEMEDICINE_API_URL =
   process.env.TELEMEDICINE_API_URL || 'http://telemedicine-service:5008/api/telemedicine';
@@ -70,10 +71,17 @@ const createAppointment = async (req, res) => {
             paymentStatus: 'Unpaid' 
         });
 
+        const notificationResults = await sendAppointmentNotifications({
+            authHeader: req.headers.authorization,
+            appointment: newAppointment,
+            eventType: 'created'
+        });
+
         res.status(201).json({ 
             success: true,
             message: 'Appointment requested successfully', 
-            data: newAppointment 
+            data: newAppointment,
+            notifications: notificationResults
         });
 
     } catch (error) {
@@ -211,10 +219,17 @@ const cancelAppointment = async (req, res) => {
         appointment.status = 'Cancelled'; 
         await appointment.save();
 
+        const notificationResults = await sendAppointmentNotifications({
+            authHeader: req.headers.authorization,
+            appointment,
+            eventType: 'cancelled'
+        });
+
         res.status(200).json({ 
             success: true,
             message: 'Appointment cancelled successfully', 
-            data: appointment 
+            data: appointment,
+            notifications: notificationResults
         });
 
     } catch (error) {
@@ -254,10 +269,17 @@ const rescheduleAppointment = async (req, res) => {
             { new: true, runValidators: true }
         );
 
+        const notificationResults = await sendAppointmentNotifications({
+            authHeader: req.headers.authorization,
+            appointment,
+            eventType: 'rescheduled'
+        });
+
         res.status(200).json({ 
             success: true,
             message: 'Appointment rescheduled successfully', 
-            data: appointment 
+            data: appointment,
+            notifications: notificationResults
         });
 
     } catch (error) {
