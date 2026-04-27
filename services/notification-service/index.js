@@ -93,6 +93,84 @@ const renderNotificationEmail = ({ headline, message }) => {
 </html>`;
 };
 
+const resolveEmailContext = ({ message, subject, headline, notificationType }) => {
+  const normalizedMessage = String(message || '').trim();
+  const lowered = normalizedMessage.toLowerCase();
+  const normalizedType = String(notificationType || '').toLowerCase();
+
+  const inferredType = (() => {
+    if (normalizedType) {
+      return normalizedType;
+    }
+
+    if (lowered.includes('payment')) {
+      return 'payment';
+    }
+
+    if (lowered.includes('rescheduled')) {
+      return 'appointment_rescheduled';
+    }
+
+    if (lowered.includes('cancelled') || lowered.includes('canceled')) {
+      return 'appointment_cancelled';
+    }
+
+    if (lowered.includes('appointment') && lowered.includes('created')) {
+      return 'appointment_created';
+    }
+
+    if (lowered.includes('appointment')) {
+      return 'appointment_update';
+    }
+
+    return 'general';
+  })();
+
+  const defaultsByType = {
+    payment: {
+      subject: 'Payment Confirmation',
+      headline: 'Payment Confirmed',
+      intro: 'Your payment has been received successfully.'
+    },
+    appointment_created: {
+      subject: 'Appointment Request Received',
+      headline: 'Appointment Request Created',
+      intro: 'Your appointment request has been recorded.'
+    },
+    appointment_rescheduled: {
+      subject: 'Appointment Rescheduled',
+      headline: 'Appointment Updated',
+      intro: 'Your appointment schedule has been updated.'
+    },
+    appointment_cancelled: {
+      subject: 'Appointment Cancellation Notice',
+      headline: 'Appointment Cancelled',
+      intro: 'This is a confirmation that an appointment has been cancelled.'
+    },
+    appointment_update: {
+      subject: 'Appointment Update',
+      headline: 'Appointment Notification',
+      intro: 'There is an update regarding your appointment.'
+    },
+    general: {
+      subject: 'Healthcare Notification',
+      headline: 'Important Notification',
+      intro: 'You have received an update from your care platform.'
+    }
+  };
+
+  const selectedDefaults = defaultsByType[inferredType] || defaultsByType.general;
+  const finalSubject = String(subject || '').trim() || selectedDefaults.subject;
+  const finalHeadline = String(headline || '').trim() || selectedDefaults.headline;
+  const finalBody = `${selectedDefaults.intro}\n\n${normalizedMessage}\n\nThank you for choosing ${APP_NAME}.`;
+
+  return {
+    subject: finalSubject,
+    headline: finalHeadline,
+    body: finalBody
+  };
+};
+
 const twilioClient = hasTwilioCredentials
   ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
   : null;
@@ -290,7 +368,7 @@ app.get('/api/notifications/health', (_req, res) => {
 
 app.post('/api/notifications/send', async (req, res) => {
   try {
-    const { patientEmail, patientPhone, message } = req.body;
+    const { patientEmail, patientPhone, message, subject, headline, notificationType } = req.body;
 
     if (!message || (!patientEmail && !patientPhone)) {
       return res.status(400).json({
@@ -319,10 +397,15 @@ app.post('/api/notifications/send', async (req, res) => {
     }
 
     const results = [];
-    const subject = 'Payment & Appointment Confirmation';
+    const emailContext = resolveEmailContext({
+      message,
+      subject,
+      headline,
+      notificationType
+    });
     const html = renderNotificationEmail({
-      headline: 'Your Payment Was Successful',
-      message
+      headline: emailContext.headline,
+      message: emailContext.body
     });
 
     if (patientEmail) {
@@ -331,8 +414,8 @@ app.post('/api/notifications/send', async (req, res) => {
         if (EMAIL_PROVIDER === 'sendgrid' || (EMAIL_PROVIDER === 'auto' && hasSendGridCredentials)) {
           emailResult = await sendEmailWithSendGrid({
             to: patientEmail,
-            subject,
-            text: message,
+            subject: emailContext.subject,
+            text: emailContext.body,
             html
           });
         } else {
@@ -340,8 +423,8 @@ app.post('/api/notifications/send', async (req, res) => {
           if (emailTransporter) {
             emailResult = await sendEmailWithFallback({
               to: patientEmail,
-              subject,
-              text: message,
+              subject: emailContext.subject,
+              text: emailContext.body,
               html
             });
           }

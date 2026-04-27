@@ -98,6 +98,7 @@ const updateAppointmentStatus = async (req, res) => {
     try {
         const appointmentId = req.params.id;
         const { status } = req.body; 
+        let notificationResults = [];
 
         // Validate that the incoming status matches our allowed enums
         const validStatuses = ['Confirmed', 'Cancelled', 'Completed'];
@@ -138,10 +139,19 @@ const updateAppointmentStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Appointment not found' });
         }
 
+        if (status === 'Confirmed' || status === 'Cancelled') {
+            notificationResults = await sendAppointmentNotifications({
+                authHeader: req.headers.authorization,
+                appointment,
+                eventType: status === 'Confirmed' ? 'confirmed' : 'cancelled'
+            });
+        }
+
         res.status(200).json({ 
             success: true,
             message: `Appointment successfully marked as ${status.toLowerCase()}`, 
-            data: appointment 
+            data: appointment,
+            notifications: notificationResults
         });
 
     } catch (error) {

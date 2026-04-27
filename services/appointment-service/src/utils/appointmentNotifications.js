@@ -62,6 +62,10 @@ const buildNotificationMessage = ({ appointment, eventType, recipientType }) => 
       return `Your appointment with ${doctorName} has been created for ${dateText} at ${timeText}. Current status: Pending.`;
     }
 
+    if (eventType === 'confirmed') {
+      return `Your appointment with ${doctorName} has been confirmed for ${dateText} at ${timeText}.`;
+    }
+
     if (eventType === 'rescheduled') {
       return `Your appointment with ${doctorName} has been rescheduled to ${dateText} at ${timeText}. Current status: Pending.`;
     }
@@ -73,11 +77,47 @@ const buildNotificationMessage = ({ appointment, eventType, recipientType }) => 
     return `A new appointment request from ${patientName} has been created for ${dateText} at ${timeText}. Current status: Pending.`;
   }
 
+  if (eventType === 'confirmed') {
+    return `The appointment with ${patientName} has been confirmed for ${dateText} at ${timeText}.`;
+  }
+
   if (eventType === 'rescheduled') {
     return `The appointment with ${patientName} has been rescheduled to ${dateText} at ${timeText}. Current status: Pending.`;
   }
 
   return `The appointment with ${patientName} for ${dateText} at ${timeText} has been cancelled.`;
+};
+
+const buildNotificationEmailContext = ({ eventType }) => {
+  if (eventType === 'created') {
+    return {
+      notificationType: 'appointment_created',
+      subject: 'Appointment Request Received',
+      headline: 'Appointment Request Created'
+    };
+  }
+
+  if (eventType === 'confirmed') {
+    return {
+      notificationType: 'appointment_confirmed',
+      subject: 'Appointment Confirmed',
+      headline: 'Appointment Confirmed'
+    };
+  }
+
+  if (eventType === 'rescheduled') {
+    return {
+      notificationType: 'appointment_rescheduled',
+      subject: 'Appointment Rescheduled',
+      headline: 'Appointment Updated'
+    };
+  }
+
+  return {
+    notificationType: 'appointment_cancelled',
+    subject: 'Appointment Cancellation Notice',
+    headline: 'Appointment Cancelled'
+  };
 };
 
 const getPatientContactDetails = async ({ authHeader, patientId }) => {
@@ -122,7 +162,7 @@ const getDoctorContactDetails = async ({ authHeader, doctorId }) => {
   }
 };
 
-const sendNotification = async ({ recipientEmail = '', recipientPhone = '', message }) => {
+const sendNotification = async ({ recipientEmail = '', recipientPhone = '', message, emailContext }) => {
   if (!message || (!recipientEmail && !recipientPhone)) {
     return {
       success: false,
@@ -139,7 +179,8 @@ const sendNotification = async ({ recipientEmail = '', recipientPhone = '', mess
     body: JSON.stringify({
       patientEmail: recipientEmail,
       patientPhone: recipientPhone,
-      message
+      message,
+      ...(emailContext || {})
     })
   });
 
@@ -174,6 +215,7 @@ const sendAppointmentNotifications = async ({ authHeader, appointment, eventType
   const results = [];
 
   for (const recipient of recipientRequests) {
+    const emailContext = buildNotificationEmailContext({ eventType });
     const message = buildNotificationMessage({
       appointment,
       eventType,
@@ -184,7 +226,8 @@ const sendAppointmentNotifications = async ({ authHeader, appointment, eventType
       const response = await sendNotification({
         recipientEmail: recipient.recipientEmail,
         recipientPhone: recipient.recipientPhone,
-        message
+        message,
+        emailContext
       });
 
       results.push({
