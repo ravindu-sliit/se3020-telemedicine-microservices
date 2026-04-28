@@ -181,6 +181,23 @@ const Doctor = () => {
     }
   };
 
+  const handleEndSession = async (appointmentId) => {
+    if (!appointmentId) return;
+
+    setActionState({ id: appointmentId, action: 'complete' });
+    setActionFeedback('');
+
+    try {
+      await updateAppointmentStatus(appointmentId, 'Completed');
+      //setActionFeedback('Appointment marked as completed.');
+      await loadAppointments();
+    } catch (error) {
+      setActionFeedback(error.message || 'Failed to complete appointment.');
+    } finally {
+      setActionState({ id: '', action: '' });
+    }
+  };
+
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
     setProfileForm(cur => ({ ...cur, [name]: value }));
@@ -474,6 +491,16 @@ const Doctor = () => {
       <div className="grid grid-cols-2 gap-6">
         <div className="card">
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Upcoming Meetings</h3>
+          {actionFeedback ? (
+            <div style={{
+              marginBottom: 12, padding: '10px 12px', borderRadius: 10, fontSize: '0.85rem',
+              background: actionFeedback.includes('failed') || actionFeedback.includes('Failed') ? '#fef2f2' : '#f0fdf4',
+              color: actionFeedback.includes('failed') || actionFeedback.includes('Failed') ? '#b91c1c' : '#166534',
+              border: `1px solid ${actionFeedback.includes('failed') || actionFeedback.includes('Failed') ? '#fecaca' : '#bbf7d0'}`
+            }}>
+              {actionFeedback}
+            </div>
+          ) : null}
           {prescriptionFeedback.message ? (
             <div
               style={{
@@ -532,6 +559,15 @@ const Doctor = () => {
                     style={{ alignSelf: 'flex-end' }}
                   >
                     {prescriptionState.appointmentId === apt._id ? 'Issuing...' : 'Issue Prescription'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    onClick={() => handleEndSession(apt._id)}
+                    disabled={actionState.id === apt._id && actionState.action === 'complete'}
+                    style={{ alignSelf: 'flex-end' }}
+                  >
+                    {actionState.id === apt._id && actionState.action === 'complete' ? 'Ending...' : 'End Session'}
                   </button>
                 </div>
               </div>
@@ -773,7 +809,9 @@ const Doctor = () => {
                     <input type="text" className="form-input" placeholder="09:00 AM" value={block.startTime} onChange={(e) => updateAvailability(i, 'startTime', e.target.value)} style={{ padding: '8px', minHeight: 'auto' }} />
                     <span style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>to</span>
                     <input type="text" className="form-input" placeholder="05:00 PM" value={block.endTime} onChange={(e) => updateAvailability(i, 'endTime', e.target.value)} style={{ padding: '8px', minHeight: 'auto' }} />
-                    <button type="button" onClick={() => removeAvailability(i)} className="btn btn-danger btn-sm" style={{ padding: '6px' }}><XCircleIcon style={{ width: 14, height: 14 }} /></button>
+                    <button type="button" onClick={() => removeAvailability(i)} className="btn btn-danger btn-sm d-inline-flex align-items-center justify-content-center" style={{ width: '60px', height: '28px', padding: '0' }}>
+                      <TrashIcon style={{ width: 30, height: 30 }} />
+                    </button>
                   </div>
                 ))}
               </div>
