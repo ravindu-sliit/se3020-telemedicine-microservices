@@ -7,15 +7,41 @@ import {
   ClockIcon, UserCircleIcon, TrashIcon
 } from '@heroicons/react/24/outline';
 import DashboardLayout from '../components/DashboardLayout';
+import { getRuntimeConfigValue } from '../services/runtimeConfig';
 import {
   fetchDoctorAppointments,
   updateAppointmentStatus,
   fetchMyDoctorProfile,
   updateMyDoctorProfile,
   applyDoctorProfile,
-  deleteMyAccount
+  deleteMyAccount,
+  fetchPatientProfile,
+  fetchPatientReports
 } from '../services/api';
 import { clearSession, getSession } from '../services/session';
+
+const PATIENT_API_BASE_URL = getRuntimeConfigValue('REACT_APP_PATIENT_API_URL', 'http://localhost:5004/api');
+const PATIENT_ASSET_BASE_URL = PATIENT_API_BASE_URL.replace(/\/api\/?$/, '');
+
+const buildReportFileUrl = (report) => {
+  if (report?.fileUrl) {
+    return report.fileUrl;
+  }
+
+  if (report?.fileName) {
+    return `${PATIENT_ASSET_BASE_URL}/uploads/${encodeURIComponent(report.fileName)}`;
+  }
+
+  if (report?.storagePath) {
+    const normalizedPath = String(report.storagePath).replace(/\\/g, '/');
+    const fileNameFromPath = normalizedPath.split('/').pop();
+    if (fileNameFromPath) {
+      return `${PATIENT_ASSET_BASE_URL}/uploads/${encodeURIComponent(fileNameFromPath)}`;
+    }
+  }
+
+  return '';
+};
 
 const parseAppointmentDateTime = (appointment) => {
   if (!appointment?.appointmentDate) {
@@ -80,11 +106,15 @@ const Doctor = () => {
     fullName: '', specialty: '', yearsOfExperience: '', medicalLicenseNumber: '',
     consultationFee: '', bio: '', qualifications: '', languages: '', availability: []
   });
+  const [reportsByPatient, setReportsByPatient] = useState({});
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState('');
 
   const sidebarLinks = [
     { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon },
     { id: 'schedule', label: 'Schedule', icon: CalendarIcon },
     { id: 'patients', label: 'Patients', icon: UserGroupIcon },
+    { id: 'patient-reports', label: 'Patient Reports', icon: DocumentTextIcon },
     { id: 'profile', label: 'Profile', icon: UserCircleIcon },
   ];
 
@@ -267,6 +297,100 @@ const Doctor = () => {
       setIsDeletingAccount(false);
     }
   };
+
+  const patientsWithAppointments = useMemo(() => {
+    const seen = new Set();
+    const grouped = [];
+
+    appointments.forEach((appointment) => {
+      const patientObject =
+        appointment?.patientId && typeof appointment.patientId === 'object'
+          ? appointment.patientId
+          : null;
+      const patientUserId =
+        patientObject?._id ||
+        patientObject?.id ||
+        appointment?.patientUserId ||
+        appointment?.patientId ||
+        '';
+      const patientName = patientObject?.fullName || appointment?.patientName || 'Patient';
+
+      const normalizedId = String(patientUserId || '').trim();
+      if (!normalizedId || seen.has(normalizedId)) {
+        return;
+      }
+
+      seen.add(normalizedId);
+      grouped.push({ userId: normalizedId, name: patientName });
+    });
+
+    return grouped;
+  }, [appointments]);
+
+  const loadPatientReports = useCallback(async () => {
+    if (patientsWithAppointments.length === 0) {
+      setReportsByPatient({});
+      return;
+    }
+
+    setReportsLoading(true);
+    setReportsError('');
+
+    try {
+      const results = await Promise.allSettled(
+        patientsWithAppointments.map(async (patient) => {
+          // Appointment records store patient user IDs. Reports API expects patient profile ID.
+          const profileResponse = await fetchPatientProfile(patient.userId);
+          const patientProfileId = profileResponse?.data?._id;
+          if (!patientProfileId) {
+            throw new Error('Patient profile not found.');
+          }
+
+          const response = await fetchPatientReports(patientProfileId);
+          const records = Array.isArray(response?.data) ? response.data : [];
+          return { patient, records };
+        })
+      );
+
+      const grouped = {};
+      let hasFailed = false;
+
+      results.forEach((result, index) => {
+        const patient = patientsWithAppointments[index];
+        if (result.status === 'fulfilled') {
+          grouped[patient.userId] = {
+            patientName: patient.name,
+            reports: result.value.records,
+            error: ''
+          };
+          return;
+        }
+
+        hasFailed = true;
+        grouped[patient.userId] = {
+          patientName: patient.name,
+          reports: [],
+          error: result.reason?.message || 'Failed to load reports for this patient.'
+        };
+      });
+
+      setReportsByPatient(grouped);
+      if (hasFailed) {
+        setReportsError('Some patient reports could not be loaded.');
+      }
+    } catch (error) {
+      setReportsByPatient({});
+      setReportsError(error.message || 'Failed to load patient reports.');
+    } finally {
+      setReportsLoading(false);
+    }
+  }, [patientsWithAppointments]);
+
+  useEffect(() => {
+    if (activeTab === 'patient-reports') {
+      loadPatientReports();
+    }
+  }, [activeTab, loadPatientReports]);
 
   const renderDashboard = () => (
     <div>
@@ -608,6 +732,119 @@ const Doctor = () => {
     </div>
   );
 
+  const renderPatientReports = () => (
+    <div className="card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 0 }}>Patient Reports</h3>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={loadPatientReports}
+          disabled={reportsLoading}
+        >
+          {reportsLoading ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
+
+      {reportsError ? (
+        <div className="error-state" style={{ marginBottom: 14 }}>{reportsError}</div>
+      ) : null}
+
+      {reportsLoading ? (
+        <div className="loading-state">Loading reports grouped by patient...</div>
+      ) : patientsWithAppointments.length === 0 ? (
+        <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>
+          No patients found yet. Reports will appear here once appointments are available.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {patientsWithAppointments.map((patient) => {
+            const groupedReports = reportsByPatient[patient.userId];
+            const reports = groupedReports?.reports || [];
+            const patientError = groupedReports?.error || '';
+
+            return (
+              <div
+                key={patient.id}
+                style={{
+                  border: '1px solid var(--gray-100)',
+                  borderRadius: 14,
+                  padding: 14,
+                  background: 'var(--gray-50)'
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    marginBottom: 10
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--gray-900)' }}>
+                      {patient.name}
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                      {reports.length} report{reports.length === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                </div>
+
+                {patientError ? (
+                  <div className="error-state">{patientError}</div>
+                ) : reports.length === 0 ? (
+                  <div style={{ color: 'var(--gray-500)', fontSize: '0.85rem' }}>
+                    No reports uploaded for this patient.
+                  </div>
+                ) : (
+                  reports.map((report, idx) => (
+                    <div key={report._id || `${patient.userId}-${idx}`} className="item-row" style={{ background: 'white' }}>
+                      {(() => {
+                        const fileUrl = buildReportFileUrl(report);
+                        const isPdf = String(report.mimeType || '').toLowerCase() === 'application/pdf';
+                        return (
+                          <>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>
+                                {report.reportType || 'Medical Report'}
+                              </div>
+                              <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                                {report.fileName || 'Unnamed file'} • {report.uploadedAt ? new Date(report.uploadedAt).toLocaleString() : 'Unknown date'}
+                              </div>
+                              {report.notes ? (
+                                <div style={{ fontSize: '0.8rem', color: 'var(--gray-600)', marginTop: 2 }}>
+                                  {report.notes}
+                                </div>
+                              ) : null}
+                            </div>
+                            {fileUrl ? (
+                              <a
+                                href={fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn btn-secondary btn-sm"
+                              >
+                                {isPdf ? 'Open PDF' : 'View'}
+                              </a>
+                            ) : (
+                              <span className="status status-pending">No file URL</span>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ))
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <DashboardLayout
       title="Doctor Dashboard"
@@ -642,6 +879,7 @@ const Doctor = () => {
           )}
         </div>
       )}
+      {activeTab === 'patient-reports' && renderPatientReports()}
       {activeTab === 'profile' && renderProfile()}
     </DashboardLayout>
   );

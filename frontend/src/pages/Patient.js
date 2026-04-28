@@ -312,7 +312,13 @@ const Patient = () => {
                 marginBottom: 10, border: '1px solid var(--gray-100)'
               }}>
                 <p style={{ fontSize: '0.85rem', color: 'var(--gray-700)', marginBottom: 4 }}>
-                  Appointment {apt.status === 'Confirmed' ? 'confirmed' : 'pending'} with {apt.doctorId?.name || 'your doctor'}
+                 Appointment {
+                      apt.status === 'Confirmed' 
+                        ? 'confirmed' 
+                        : apt.status === 'Cancelled' 
+                          ? 'cancelled' 
+                          : 'pending'
+                    } with {apt.doctorName || 'your doctor'}
                 </p>
                 <span style={{ fontSize: '0.75rem', color: 'var(--gray-400)' }}>
                   {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : ''}
