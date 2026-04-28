@@ -297,11 +297,59 @@ const rescheduleAppointment = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Retrieve platform-level appointment metrics for admins
+ * @route   GET /api/appointments/admin/overview
+ * @access  Private (Admin role required)
+ */
+const getAppointmentsAdminOverview = async (_req, res) => {
+    try {
+        const [totalAppointments, byStatus, byPaymentStatus, latestAppointments] = await Promise.all([
+            Appointment.countDocuments(),
+            Appointment.aggregate([
+                {
+                    $group: {
+                        _id: '$status',
+                        count: { $sum: 1 }
+                    }
+                }
+            ]),
+            Appointment.aggregate([
+                {
+                    $group: {
+                        _id: '$paymentStatus',
+                        count: { $sum: 1 }
+                    }
+                }
+            ]),
+            Appointment.find({})
+                .sort({ appointmentDate: -1, createdAt: -1 })
+                .limit(10)
+                .select('patientId doctorId patientName doctorName appointmentDate timeSlot status paymentStatus')
+                .lean()
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Appointment operations overview retrieved successfully',
+            data: {
+                totalAppointments,
+                byStatus: byStatus.map((entry) => ({ status: entry._id || 'Unknown', count: entry.count })),
+                byPaymentStatus: byPaymentStatus.map((entry) => ({ paymentStatus: entry._id || 'Unknown', count: entry.count })),
+                latestAppointments
+            }
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: 'Server Error', error: error.message });
+    }
+};
+
 module.exports = {
     createAppointment,
     updateAppointmentStatus,
     getPatientAppointments,
     getDoctorAppointments,
     cancelAppointment,
-    rescheduleAppointment
+    rescheduleAppointment,
+    getAppointmentsAdminOverview
 };

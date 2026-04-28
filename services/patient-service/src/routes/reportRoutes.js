@@ -1,12 +1,20 @@
 const express = require('express');
 
-const { uploadMedicalReport, getMedicalReportsByPatient } = require('../controllers/reportController');
+const {
+	uploadMedicalReport,
+	getMedicalReportsByPatient,
+	getMyMedicalReports,
+	getMedicalReportsAdminOverview
+} = require('../controllers/reportController');
 const protect = require('../middleware/authMiddleware');
 const authorizeRoles = require('../middleware/roleMiddleware');
 const { handleReportUpload } = require('../middleware/uploadMiddleware');
 const { authorizeReportAccessByPatientId } = require('../middleware/reportAccessMiddleware');
 
 const router = express.Router();
+
+router.get('/me', protect, authorizeRoles('patient'), getMyMedicalReports);
+router.get('/admin/overview', protect, authorizeRoles('admin'), getMedicalReportsAdminOverview);
 
 router.post(
 	'/',

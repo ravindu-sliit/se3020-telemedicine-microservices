@@ -1,3 +1,4 @@
+/* global globalThis */
 import { getAuthToken } from './session';
 import { getRuntimeConfigValue } from './runtimeConfig';
 
@@ -11,9 +12,10 @@ const NOTIFICATION_BASE_URL = getRuntimeConfigValue(
   'REACT_APP_NOTIFICATION_API_URL',
   'http://localhost:5007/api'
 );
+const TELEMEDICINE_BASE_URL = getRuntimeConfigValue('REACT_APP_TELEMEDICINE_API_URL', 'http://localhost:5008/api');
 
-const _originalFetch = window.fetch;
-window.fetch = async (url, options) => {
+const _originalFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = async (url, options) => {
   if (typeof url === 'string' && !url.includes('localhost:500')) return _originalFetch(url, options);
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), 8000);
@@ -44,7 +46,9 @@ const parseResponse = async (response) => {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.message || 'Request failed');
+    const requestUrl = response.url || '';
+    const message = payload.message || 'Request failed';
+    throw new Error(requestUrl ? `${message} (${requestUrl})` : message);
   }
 
   return payload;
@@ -88,6 +92,30 @@ export const loginUser = async (formData) => {
   return parseResponse(response);
 };
 
+export const requestPasswordReset = async (email) => {
+  const response = await fetch(`${AUTH_BASE_URL}/auth/forgot-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ email })
+  });
+
+  return parseResponse(response);
+};
+
+export const resetPassword = async ({ token, password }) => {
+  const response = await fetch(`${AUTH_BASE_URL}/auth/reset-password`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ token, password })
+  });
+
+  return parseResponse(response);
+};
+
 export const fetchCurrentUser = async () => {
   const response = await fetch(`${AUTH_BASE_URL}/auth/me`, {
     headers: buildHeaders()
@@ -99,6 +127,30 @@ export const fetchCurrentUser = async () => {
 export const fetchAllUsers = async () => {
   const response = await fetch(`${AUTH_BASE_URL}/auth/users`, {
     headers: buildHeaders()
+  });
+
+  return parseResponse(response);
+};
+
+export const createUserAccount = async (userData) => {
+  const response = await fetch(`${AUTH_BASE_URL}/auth/users`, {
+    method: 'POST',
+    headers: buildHeaders({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify(userData)
+  });
+
+  return parseResponse(response);
+};
+
+export const updateUserAccount = async (userId, userData) => {
+  const response = await fetch(`${AUTH_BASE_URL}/auth/users/${userId}`, {
+    method: 'PUT',
+    headers: buildHeaders({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify(userData)
   });
 
   return parseResponse(response);
@@ -167,14 +219,44 @@ export const updatePatientProfile = async (userId, profileData) => {
 };
 
 // NEW: Upload Medical Report (No Content-Type header so the browser sets the boundary!)
-export const uploadMedicalReport = async (patientId, formData) => {
-  const response = await fetch(`${PATIENT_BASE_URL}/patients/${patientId}/reports`, {
+export const uploadMedicalReport = async (formData) => {
+  const response = await fetch(`${PATIENT_BASE_URL}/patients/reports`, {
     method: 'POST',
     headers: buildHeaders(), 
     body: formData
   });
 
   return parseResponse(response);
+};
+
+export const fetchMyMedicalReports = async () => {
+  const session = JSON.parse(localStorage.getItem('mediconnect_session') || 'null');
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    return { success: true, data: [] };
+  }
+
+  try {
+    const profileResponse = await fetchPatientProfile(userId);
+    const patientProfileId = profileResponse?.data?._id;
+
+    if (!patientProfileId) {
+      return { success: true, data: [] };
+    }
+
+    const response = await fetch(`${PATIENT_BASE_URL}/patients/reports/${patientProfileId}`, {
+      headers: buildHeaders()
+    });
+
+    return parseResponse(response);
+  } catch (error) {
+    if (String(error?.message || '').includes('Patient profile not found')) {
+      return { success: true, data: [] };
+    }
+
+    throw error;
+  }
 };
 
 // ── AI & Other Services ─────────────────────────────────────────────────────
@@ -301,11 +383,126 @@ export const issuePrescription = async (prescriptionData) => {
   return parseResponse(response);
 };
 
+export const fetchMyPrescriptions = async () => {
+  try {
+    const response = await fetchAllDoctors();
+    const doctors = Array.isArray(response?.data) ? response.data : [];
+    const session = JSON.parse(localStorage.getItem('mediconnect_session') || 'null');
+    const patientId = session?.user?.id;
+
+    if (!patientId) {
+      return { success: true, data: [] };
+    }
+
+    let patientProfileId = '';
+    try {
+      const profileResponse = await fetchPatientProfile(patientId);
+      patientProfileId = profileResponse?.data?._id || '';
+    } catch (error) {
+      console.warn('Unable to resolve patient profile for prescriptions:', error.message);
+      patientProfileId = '';
+    }
+
+    const allowedPatientIds = new Set([patientId, patientProfileId].filter(Boolean));
+
+    const prescriptions = doctors
+      .flatMap((doctor) =>
+        Array.isArray(doctor.digitalPrescriptions)
+          ? doctor.digitalPrescriptions
+              .filter((entry) => allowedPatientIds.has(entry.patientId))
+              .map((entry) => ({
+                ...entry,
+                doctorId: doctor._id,
+                doctorName: doctor.fullName || 'Doctor',
+                specialty: doctor.specialty || 'General Medicine'
+              }))
+          : []
+      )
+      .sort((a, b) => new Date(b.dateIssued || 0).getTime() - new Date(a.dateIssued || 0).getTime());
+
+    return {
+      success: true,
+      count: prescriptions.length,
+      data: prescriptions
+    };
+  } catch (error) {
+    console.warn('Falling back to empty prescription list:', error.message);
+    return { success: true, data: [] };
+  }
+};
+
+export const updateUserStatus = async (userId, status) => {
+  const response = await fetch(`${AUTH_BASE_URL}/auth/users/${userId}/status`, {
+    method: 'PUT',
+    headers: buildHeaders({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify({ status })
+  });
+
+  return parseResponse(response);
+};
+
+export const deleteUserAccount = async (userId) => {
+  const response = await fetch(`${AUTH_BASE_URL}/auth/users/${userId}`, {
+    method: 'DELETE',
+    headers: buildHeaders()
+  });
+
+  return parseResponse(response);
+};
+
 export const fetchPatientReports = async (patientId) => {
   const response = await fetch(`${DOCTOR_BASE_URL}/doctors/patients/${patientId}/reports`, {
     headers: buildHeaders()
   });
   return parseResponse(response);
+};
+
+// ── Admin Operations ───────────────────────────────────────────────────────
+
+export const fetchAppointmentsAdminOverview = async () => {
+  const response = await fetch(`${APPOINTMENT_BASE_URL}/appointments/admin/overview`, {
+    headers: buildHeaders()
+  });
+  return parseResponse(response);
+};
+
+export const fetchReportsAdminOverview = async () => {
+  const response = await fetch(`${PATIENT_BASE_URL}/patients/reports/admin/overview`, {
+    headers: buildHeaders()
+  });
+  return parseResponse(response);
+};
+
+const checkServiceHealth = async (label, baseUrl) => {
+  try {
+    const response = await fetch(`${baseUrl}/health`, {
+      headers: buildHeaders()
+    });
+    const payload = await parseResponse(response);
+    return { label, status: 'healthy', details: payload?.message || 'OK' };
+  } catch (error) {
+    return { label, status: 'degraded', details: error.message || 'Health check failed' };
+  }
+};
+
+export const fetchServiceHealthSummary = async () => {
+  const checks = await Promise.all([
+    checkServiceHealth('Auth', AUTH_BASE_URL),
+    checkServiceHealth('Doctor', DOCTOR_BASE_URL),
+    checkServiceHealth('Patient', PATIENT_BASE_URL),
+    checkServiceHealth('Appointment', APPOINTMENT_BASE_URL),
+    checkServiceHealth('Telemedicine', TELEMEDICINE_BASE_URL),
+    checkServiceHealth('AI', AI_BASE_URL),
+    checkServiceHealth('Payment', PAYMENT_BASE_URL),
+    checkServiceHealth('Notification', NOTIFICATION_BASE_URL)
+  ]);
+
+  return {
+    success: true,
+    data: checks
+  };
 };
 
 export const disableDoctorProfile = async () => {

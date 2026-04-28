@@ -7,7 +7,15 @@ import {
   uploadMedicalReport 
 } from '../services/api';
 import { getSession } from '../services/session';
-import { DocumentArrowUpIcon } from '@heroicons/react/24/outline';
+import {
+  DocumentArrowUpIcon,
+  ExclamationTriangleIcon,
+  HeartIcon,
+  MapPinIcon,
+  PhoneIcon,
+  ShieldCheckIcon,
+  UserCircleIcon
+} from '@heroicons/react/24/outline';
 
 const emptyProfile = {
   phone: '',
@@ -44,12 +52,55 @@ const mapProfileToForm = (profile) => ({
 const splitCsv = (value) =>
   value.split(',').map((item) => item.trim()).filter(Boolean);
 
+const fieldLabelStyle = {
+  fontSize: '0.78rem',
+  fontWeight: 800,
+  color: 'var(--gray-600)',
+  marginBottom: 8,
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em'
+};
+
+const sectionStyle = {
+  borderTop: '1px solid var(--gray-100)',
+  paddingTop: 26,
+  marginTop: 26
+};
+
+const SectionHeader = ({ icon: Icon, title, subtitle }) => (
+  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 18 }}>
+    <div
+      style={{
+        width: 38,
+        height: 38,
+        borderRadius: 10,
+        background: 'var(--primary-50)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0
+      }}
+    >
+      <Icon style={{ width: 20, height: 20, color: 'var(--primary-600)' }} />
+    </div>
+    <div>
+      <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: '0 0 4px', color: 'var(--gray-900)' }}>
+        {title}
+      </h3>
+      <p style={{ margin: 0, color: 'var(--gray-500)', fontSize: '0.88rem', lineHeight: 1.5 }}>
+        {subtitle}
+      </p>
+    </div>
+  </div>
+);
+
 const PatientProfile = () => {
   const session = React.useMemo(() => getSession(), []);
   const [form, setForm] = React.useState(emptyProfile);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [hasExistingProfile, setHasExistingProfile] = React.useState(false);
+  const [profileId, setProfileId] = React.useState('');
   const [feedback, setFeedback] = React.useState({ type: '', message: '' });
 
   // Medical Report Upload State
@@ -59,6 +110,18 @@ const PatientProfile = () => {
   const [reportNotes, setReportNotes] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadFeedback, setUploadFeedback] = useState({ type: '', message: '' });
+
+  const completionFields = [
+    form.phone,
+    form.dateOfBirth,
+    form.gender,
+    form.bloodGroup,
+    form.address.city,
+    form.emergencyContact.name,
+    form.emergencyContact.phone
+  ];
+  const completedFieldCount = completionFields.filter(Boolean).length;
+  const completionPercent = Math.round((completedFieldCount / completionFields.length) * 100);
 
   React.useEffect(() => {
     const loadProfile = async () => {
@@ -72,9 +135,11 @@ const PatientProfile = () => {
         const response = await fetchPatientProfile(session.user.id);
         setForm(mapProfileToForm(response.data));
         setHasExistingProfile(true);
+        setProfileId(response.data?._id || '');
       } catch (error) {
         if (error.message === 'Patient profile not found') {
           setHasExistingProfile(false);
+          setProfileId('');
         } else {
           setFeedback({ type: 'error', message: error.message });
         }
@@ -123,6 +188,7 @@ const PatientProfile = () => {
 
       setForm(mapProfileToForm(response.data));
       setHasExistingProfile(true);
+      setProfileId(response.data?._id || '');
       setFeedback({
         type: 'success',
         message: hasExistingProfile ? 'Patient profile updated successfully.' : 'Patient profile created successfully.'
@@ -141,16 +207,22 @@ const PatientProfile = () => {
       return;
     }
 
+    if (!profileId) {
+      setUploadFeedback({ type: 'error', message: 'Please save your patient profile before uploading reports.' });
+      return;
+    }
+
     setIsUploading(true);
     setUploadFeedback({ type: '', message: '' });
 
     const formData = new FormData();
-    formData.append('file', reportFile);
+    formData.append('report', reportFile);
+    formData.append('patientId', profileId);
     formData.append('reportType', reportType);
     formData.append('notes', reportNotes);
 
     try {
-      await uploadMedicalReport(session.user.id, formData);
+      await uploadMedicalReport(formData);
       setUploadFeedback({ type: 'success', message: 'Medical report uploaded successfully!' });
       
       // Reset form
@@ -173,30 +245,45 @@ const PatientProfile = () => {
           <div className="dashboard-header animate-fade-in-up">
             <h1 className="dashboard-title">Patient Profile</h1>
             <p className="dashboard-subtitle" style={{ marginBottom: 0 }}>
-              Your details are saved securely and linked to your account.
+              Keep your clinical, contact, and emergency details ready for appointments.
             </p>
           </div>
 
           <div className="card animate-fade-in-up delay-100" style={{ padding: 28 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr', gap: 24, marginBottom: 24 }}>
-              <div style={{ borderRadius: 24, padding: 24, background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)', border: '1px solid #dbeafe' }}>
-                <div style={{ width: 64, height: 64, borderRadius: 18, background: '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', fontWeight: 800, marginBottom: 16 }}>
-                  {(session?.user?.fullName || 'P').slice(0, 1).toUpperCase()}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
+              <div style={{ borderRadius: 16, padding: 22, background: '#f8fafc', border: '1px solid var(--gray-100)' }}>
+                <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 18 }}>
+                  <div style={{ width: 64, height: 64, borderRadius: 16, background: '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', fontWeight: 800 }}>
+                    {(session?.user?.fullName || 'P').slice(0, 1).toUpperCase()}
+                  </div>
+                  <div>
+                    <h2 style={{ margin: '0 0 4px', fontSize: '1.28rem', fontWeight: 800 }}>{session?.user?.fullName || 'Guest'}</h2>
+                    <p style={{ color: 'var(--gray-500)', margin: 0, fontSize: '0.9rem' }}>{session?.user?.email || 'Not signed in'}</p>
+                  </div>
                 </div>
-                <h2 style={{ marginBottom: 8, fontSize: '1.35rem', fontWeight: 800 }}>{session?.user?.fullName || 'Guest'}</h2>
-                <p style={{ color: 'var(--gray-500)', marginBottom: 18 }}>{session?.user?.email || 'Not signed in'}</p>
-                <div className={`status ${hasExistingProfile ? 'status-confirmed' : 'status-pending'}`}>
-                  {hasExistingProfile ? 'Profile synced' : 'Profile pending'}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div className={`status ${hasExistingProfile ? 'status-confirmed' : 'status-pending'}`}>
+                    {hasExistingProfile ? 'Profile active' : 'Profile pending'}
+                  </div>
+                  <span style={{ color: 'var(--gray-500)', fontSize: '0.86rem' }}>
+                    Completion {completionPercent}%
+                  </span>
+                </div>
+                <div style={{ height: 8, borderRadius: 999, background: '#e5e7eb', overflow: 'hidden', marginTop: 14 }}>
+                  <div style={{ width: `${completionPercent}%`, height: '100%', background: '#2563eb' }} />
                 </div>
               </div>
 
               {/* Document Upload Section */}
               {hasExistingProfile ? (
-                <div style={{ borderRadius: 24, padding: 24, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <div style={{ borderRadius: 16, padding: 22, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                     <DocumentArrowUpIcon style={{ width: 24, height: 24, color: '#166534' }} />
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#166534' }}>Upload Medical Report</h3>
                   </div>
+                  <p style={{ color: '#166534', fontSize: '0.88rem', lineHeight: 1.55, margin: '0 0 14px' }}>
+                    Add PDF or image reports so doctors can review them before consultations.
+                  </p>
                   
                   {uploadFeedback.message && (
                     <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, fontSize: '0.85rem', background: uploadFeedback.type === 'success' ? '#dcfce7' : '#fee2e2', color: uploadFeedback.type === 'success' ? '#166534' : '#991b1b' }}>
@@ -206,7 +293,7 @@ const PatientProfile = () => {
 
                   <form onSubmit={handleReportUpload}>
                     <div className="grid grid-cols-2 gap-3" style={{ marginBottom: 12 }}>
-                      <select className="input" value={reportType} onChange={(e) => setReportType(e.target.value)}>
+                      <select className="input" value={reportType} onChange={(e) => setReportType(e.target.value)} aria-label="Report type">
                         <option value="Blood Test">Blood Test</option>
                         <option value="X-Ray">X-Ray</option>
                         <option value="MRI">MRI Scan</option>
@@ -218,7 +305,7 @@ const PatientProfile = () => {
                         ref={fileInputRef}
                         accept=".pdf,.jpg,.jpeg,.png"
                         onChange={(e) => setReportFile(e.target.files[0])}
-                        style={{ padding: '8px', fontSize: '0.85rem' }} 
+                        style={{ padding: '9px', fontSize: '0.85rem', background: 'white', border: '1px solid #bbf7d0', borderRadius: 12 }} 
                       />
                     </div>
                     <input 
@@ -230,13 +317,16 @@ const PatientProfile = () => {
                       style={{ marginBottom: 12 }} 
                     />
                     <button type="submit" disabled={isUploading || !reportFile} className="btn btn-primary btn-sm w-full">
-                      {isUploading ? 'Uploading...' : 'Upload Document'}
+                      {isUploading ? 'Uploading...' : 'Upload Report'}
                     </button>
                   </form>
                 </div>
               ) : (
-                <div style={{ borderRadius: 24, padding: 24, background: '#fff7ed', border: '1px solid #fed7aa' }}>
-                  <h3 style={{ marginBottom: 10, fontSize: '1rem', fontWeight: 800 }}>Complete Your Profile</h3>
+                <div style={{ borderRadius: 16, padding: 22, background: '#fff7ed', border: '1px solid #fed7aa' }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+                    <ExclamationTriangleIcon style={{ width: 22, height: 22, color: '#c2410c' }} />
+                    <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#9a3412' }}>Complete Your Profile</h3>
+                  </div>
                   <p style={{ color: 'var(--gray-600)', lineHeight: 1.7, marginBottom: 0 }}>
                     Please fill out and save your patient profile information below before you can upload medical reports.
                   </p>
@@ -254,18 +344,23 @@ const PatientProfile = () => {
               <p style={{ margin: 0, color: 'var(--gray-500)' }}>Loading patient profile...</p>
             ) : (
               <form onSubmit={handleSubmit}>
+                <SectionHeader
+                  icon={UserCircleIcon}
+                  title="Personal Details"
+                  subtitle="Core identity information used by care teams and appointment records."
+                />
                 <div className="grid grid-cols-2 gap-5">
                   <label>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: 8 }}>Phone</div>
-                    <input className="input" name="phone" value={form.phone} onChange={updateField} />
+                    <div style={fieldLabelStyle}>Phone</div>
+                    <input className="input" name="phone" value={form.phone} onChange={updateField} placeholder="+94 77 123 4567" required />
                   </label>
                   <label>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: 8 }}>Date of Birth</div>
-                    <input className="input" type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={updateField} />
+                    <div style={fieldLabelStyle}>Date of Birth</div>
+                    <input className="input" type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={updateField} required />
                   </label>
                   <label>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: 8 }}>Gender</div>
-                    <select className="input" name="gender" value={form.gender} onChange={updateField}>
+                    <div style={fieldLabelStyle}>Gender</div>
+                    <select className="input" name="gender" value={form.gender} onChange={updateField} required>
                       <option value="">Select gender</option>
                       <option value="male">Male</option>
                       <option value="female">Female</option>
@@ -274,7 +369,7 @@ const PatientProfile = () => {
                     </select>
                   </label>
                   <label>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: 8 }}>Blood Group</div>
+                    <div style={fieldLabelStyle}>Blood Group</div>
                     <select className="input" name="bloodGroup" value={form.bloodGroup} onChange={updateField}>
                       <option value="">Select blood group</option>
                       {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((group) => (
@@ -282,18 +377,32 @@ const PatientProfile = () => {
                       ))}
                     </select>
                   </label>
-                  <label>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: 8 }}>Allergies</div>
-                    <input className="input" name="allergies" value={form.allergies} onChange={updateField} placeholder="Comma separated values" />
-                  </label>
-                  <label>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: 8 }}>Chronic Conditions</div>
-                    <input className="input" name="chronicConditions" value={form.chronicConditions} onChange={updateField} placeholder="Comma separated values" />
-                  </label>
                 </div>
 
-                <div style={{ marginTop: 28 }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 14 }}>Address</h3>
+                <div style={sectionStyle}>
+                  <SectionHeader
+                    icon={HeartIcon}
+                    title="Medical Background"
+                    subtitle="Add known allergies and ongoing conditions as comma-separated entries."
+                  />
+                  <div className="grid grid-cols-2 gap-5">
+                  <label>
+                    <div style={fieldLabelStyle}>Allergies</div>
+                    <input className="input" name="allergies" value={form.allergies} onChange={updateField} placeholder="Penicillin, peanuts" />
+                  </label>
+                  <label>
+                    <div style={fieldLabelStyle}>Chronic Conditions</div>
+                    <input className="input" name="chronicConditions" value={form.chronicConditions} onChange={updateField} placeholder="Diabetes, hypertension" />
+                  </label>
+                  </div>
+                </div>
+
+                <div style={sectionStyle}>
+                  <SectionHeader
+                    icon={MapPinIcon}
+                    title="Residential Address"
+                    subtitle="Used for care coordination, billing, and emergency context."
+                  />
                   <div className="grid grid-cols-2 gap-5">
                     <input className="input" name="street" value={form.address.street} onChange={(event) => updateNestedField('address', event)} placeholder="Street" />
                     <input className="input" name="city" value={form.address.city} onChange={(event) => updateNestedField('address', event)} placeholder="City" />
@@ -303,16 +412,24 @@ const PatientProfile = () => {
                   </div>
                 </div>
 
-                <div style={{ marginTop: 28 }}>
-                  <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: 14 }}>Emergency Contact</h3>
+                <div style={sectionStyle}>
+                  <SectionHeader
+                    icon={PhoneIcon}
+                    title="Emergency Contact"
+                    subtitle="A trusted contact who can be reached during urgent care situations."
+                  />
                   <div className="grid grid-cols-3 gap-5">
-                    <input className="input" name="name" value={form.emergencyContact.name} onChange={(event) => updateNestedField('emergencyContact', event)} placeholder="Name" />
+                    <input className="input" name="name" value={form.emergencyContact.name} onChange={(event) => updateNestedField('emergencyContact', event)} placeholder="Full name" />
                     <input className="input" name="relationship" value={form.emergencyContact.relationship} onChange={(event) => updateNestedField('emergencyContact', event)} placeholder="Relationship" />
-                    <input className="input" name="phone" value={form.emergencyContact.phone} onChange={(event) => updateNestedField('emergencyContact', event)} placeholder="Phone" />
+                    <input className="input" name="phone" value={form.emergencyContact.phone} onChange={(event) => updateNestedField('emergencyContact', event)} placeholder="Phone number" />
                   </div>
                 </div>
 
-                <div style={{ marginTop: 28, display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ ...sectionStyle, display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', color: 'var(--gray-500)', fontSize: '0.88rem' }}>
+                    <ShieldCheckIcon style={{ width: 20, height: 20, color: '#16a34a' }} />
+                    Your profile is linked to your signed-in account.
+                  </div>
                   <button className="btn btn-primary btn-lg" type="submit" disabled={isSaving || !session?.user?.id}>
                     {isSaving ? 'Saving...' : hasExistingProfile ? 'Update Profile' : 'Create Profile'}
                   </button>

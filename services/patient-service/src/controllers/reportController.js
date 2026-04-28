@@ -1,4 +1,5 @@
 const MedicalReport = require('../models/MedicalReport');
+const PatientProfile = require('../models/PatientProfile');
 
 const uploadMedicalReport = async (req, res) => {
   try {
@@ -70,7 +71,79 @@ const getMedicalReportsByPatient = async (req, res) => {
   }
 };
 
+const getMyMedicalReports = async (req, res) => {
+  try {
+    const patientProfile = await PatientProfile.findOne({ userId: req.user.id }).select('_id');
+
+    if (!patientProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient profile not found'
+      });
+    }
+
+    const reports = await MedicalReport.find({ patientId: patientProfile._id }).sort({ uploadedAt: -1, createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Medical reports retrieved successfully',
+      count: reports.length,
+      patientId: patientProfile._id,
+      data: reports
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch your medical reports',
+      error: error.message
+    });
+  }
+};
+
+const getMedicalReportsAdminOverview = async (_req, res) => {
+  try {
+    const [totalReports, reportsByType, latestUploads] = await Promise.all([
+      MedicalReport.countDocuments(),
+      MedicalReport.aggregate([
+        {
+          $group: {
+            _id: '$reportType',
+            count: { $sum: 1 }
+          }
+        },
+        { $sort: { count: -1 } }
+      ]),
+      MedicalReport.find({})
+        .sort({ uploadedAt: -1, createdAt: -1 })
+        .limit(10)
+        .select('patientId reportType fileName mimeType uploadedAt')
+        .lean()
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Medical report operations overview retrieved successfully',
+      data: {
+        totalReports,
+        reportsByType: reportsByType.map((entry) => ({
+          reportType: entry._id || 'Unknown',
+          count: entry.count
+        })),
+        latestUploads
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch report operations overview',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   uploadMedicalReport,
-  getMedicalReportsByPatient
+  getMedicalReportsByPatient,
+  getMyMedicalReports,
+  getMedicalReportsAdminOverview
 };

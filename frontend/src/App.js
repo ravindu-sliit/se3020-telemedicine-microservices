@@ -14,6 +14,7 @@ import Admin from './pages/Admin';
 import BookAppointment from './pages/BookAppointment';
 import TelemedicineRoom from './pages/TelemedicineRoom';
 import SymptomChecker from './pages/SymptomChecker';
+import MedicalHistory from './pages/MedicalHistory';
 import { PaymentSuccess, PaymentCancel } from './pages/PaymentStatus';
 
 const roleHomePath = (role) => {
@@ -67,6 +68,10 @@ function App() {
           <Route
             path="/patient/book-appointment"
             element={<RoleProtectedRoute allowedRoles={['patient']} element={<BookAppointment />} />}
+          />
+          <Route
+            path="/patient/medical-history"
+            element={<RoleProtectedRoute allowedRoles={['patient']} element={<MedicalHistory />} />}
           />
           <Route
             path="/payments/success"

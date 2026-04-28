@@ -2,7 +2,15 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'JWT_EXPIRES_IN'];
+if (!process.env.MONGODB_URI && process.env.AUTH_MONGODB_URI) {
+  process.env.MONGODB_URI = process.env.AUTH_MONGODB_URI;
+}
+
+if (!process.env.JWT_EXPIRES_IN) {
+  process.env.JWT_EXPIRES_IN = '7d';
+}
+
+const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
 
 requiredEnvVars.forEach((envVar) => {
   if (!process.env[envVar]) {
