@@ -6,7 +6,7 @@ import {
   BellIcon, HeartIcon, VideoCameraIcon
 } from '@heroicons/react/24/outline';
 import Navbar from '../components/Navbar';
-import { fetchPatientAppointments, cancelAppointment, rescheduleAppointment } from '../services/api';
+import { fetchPatientAppointments, cancelAppointment, rescheduleAppointment, fetchMyPrescriptions } from '../services/api';
 import { getSession } from '../services/session';
 
 const Patient = () => {
@@ -15,10 +15,13 @@ const Patient = () => {
   const navigate = useNavigate();
 
   const [appointments, setAppointments] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [actionState, setActionState] = useState({ id: '', action: '' });
   const [actionFeedback, setActionFeedback] = useState({ type: '', message: '' });
+  const [appointmentSearch, setAppointmentSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   
   // Reschedule State
   const [rescheduleId, setRescheduleId] = useState('');
@@ -28,12 +31,18 @@ const Patient = () => {
     setIsLoading(true);
     setLoadError('');
     try {
-      const response = await fetchPatientAppointments();
-      const records = Array.isArray(response?.data) ? response.data : [];
-      setAppointments(records);
+      const [appointmentsResponse, prescriptionsResponse] = await Promise.all([
+        fetchPatientAppointments(),
+        fetchMyPrescriptions()
+      ]);
+      const appointmentRecords = Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : [];
+      const prescriptionRecords = Array.isArray(prescriptionsResponse?.data) ? prescriptionsResponse.data : [];
+      setAppointments(appointmentRecords);
+      setPrescriptions(prescriptionRecords);
     } catch (error) {
       setLoadError(error.message || 'Failed to load appointments.');
       setAppointments([]);
+      setPrescriptions([]);
     } finally {
       setIsLoading(false);
     }
@@ -142,6 +151,14 @@ const Patient = () => {
   };
 
   const upcomingCount = appointments.filter(a => a.status === 'Confirmed' || a.status === 'Pending').length;
+  const normalizedSearch = appointmentSearch.trim().toLowerCase();
+  const filteredAppointments = appointments.filter((apt) => {
+    const doctorName = (apt.doctorId?.fullName || apt.doctorId?.name || apt.doctorName || '').toLowerCase();
+    const status = String(apt.status || '').toLowerCase();
+    const matchesSearch = !normalizedSearch || doctorName.includes(normalizedSearch);
+    const matchesStatus = statusFilter === 'all' || status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
 
   const renderDashboard = () => (
     <div>
@@ -168,12 +185,45 @@ const Patient = () => {
         })}
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-rows-2 gap-6">
         {/* Appointments from API */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>My Appointments</h3>
-            <Link to="/patient/book-appointment" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary-600)' }}>Book New</Link>
+            <Link to="/patient/book-appointment" 
+            style={{ 
+              fontSize: '0.8rem', 
+              fontWeight: 600, 
+              color: 'white', 
+              backgroundColor: 'var(--primary-600)',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              textDecoration: 'none', 
+              display: 'inline-block' 
+            }}
+          >
+            Book New
+          </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3" style={{ marginBottom: 12 }}>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search by doctor name"
+              value={appointmentSearch}
+              onChange={(event) => setAppointmentSearch(event.target.value)}
+            />
+            <select
+              className="form-input"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value="all">All statuses</option>
+              <option value="pending">Pending</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
           </div>
           
           {actionFeedback.message && (
@@ -204,24 +254,47 @@ const Patient = () => {
               );
             }
 
-            return appointments.slice(0, 4).map((apt, idx) => {
+            if (filteredAppointments.length === 0) {
+              return (
+                <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem', padding: '8px 0 16px' }}>
+                  No appointments match your search/filter.
+                </div>
+              );
+            }
+
+            return filteredAppointments.slice(0, 4).map((apt, idx) => {
               const status = (apt.status || '').toLowerCase();
               const canModify = status === 'pending' || status === 'confirmed';
               const isRescheduling = rescheduleId === apt._id;
+              const appointmentPrescriptions = prescriptions.filter(
+                (item) => String(item?.appointmentId || '').trim() === String(apt?._id || '').trim()
+              );
+              const doctorName = apt.doctorId?.fullName || apt.doctorId?.name || apt.doctorName || 'Doctor';
+              const specialty = apt.specialty || apt.doctorId?.specialty || 'General';
+              const appointmentDateLabel = apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : 'TBD';
               
               return (
-                <div key={apt._id || idx} style={{ borderBottom: '1px solid var(--gray-100)', paddingBottom: 12, marginBottom: 12 }}>
-                  <div className="item-row" style={{ borderBottom: 'none', paddingBottom: 0, marginBottom: 0 }}>
+                <div
+                  key={apt._id || idx}
+                  style={{
+                    border: '1px solid var(--gray-100)',
+                    borderRadius: 14,
+                    padding: 14,
+                    marginBottom: 12,
+                    background: 'white'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ width: 42, height: 42, borderRadius: 12, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <UserIcon style={{ width: 20, height: 20, color: 'var(--primary-600)' }} />
                       </div>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)', marginBottom: 2 }}>
-                          {apt.doctorId?.fullName || apt.doctorId?.name || apt.doctorName || 'Doctor'}
+                        <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--gray-900)', marginBottom: 2 }}>
+                          {doctorName}
                         </div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
-                          {apt.specialty || apt.doctorId?.specialty || 'General'} • {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : 'TBD'} {apt.timeSlot && `at ${apt.timeSlot}`}
+                        <div style={{ fontSize: '0.82rem', color: 'var(--gray-500)' }}>
+                          {specialty}
                         </div>
                       </div>
                     </div>
@@ -229,10 +302,29 @@ const Patient = () => {
                       {apt.status || 'pending'}
                     </span>
                   </div>
-                  
+
+                  <div className="grid grid-cols-2 gap-3" style={{ marginBottom: 10 }}>
+                    <div style={{ padding: 10, border: '1px solid var(--gray-100)', borderRadius: 10, background: 'var(--gray-50)' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--gray-400)', fontWeight: 700, marginBottom: 3 }}>DATE</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--gray-700)', fontWeight: 600 }}>
+                        {appointmentDateLabel}
+                      </div>
+                    </div>
+                    <div style={{ padding: 10, border: '1px solid var(--gray-100)', borderRadius: 10, background: 'var(--gray-50)' }}>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--gray-400)', fontWeight: 700, marginBottom: 3 }}>TIME</div>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--gray-700)', fontWeight: 600 }}>
+                        {apt.timeSlot || 'TBD'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.74rem', color: 'var(--gray-400)', marginBottom: 8 }}>
+                    Appointment ID: {apt._id || 'N/A'}
+                  </div>
+
                   {/* Action Buttons */}
                   {canModify && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                       {status === 'confirmed' && apt.videoMeetingUrl && (
                         <button
                           className="btn btn-success btn-sm"
@@ -291,6 +383,32 @@ const Patient = () => {
                       </button>
                     </form>
                   )}
+
+                  {appointmentPrescriptions.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        background: '#f8fafc',
+                        border: '1px solid var(--gray-100)',
+                        borderRadius: 10,
+                        padding: 10
+                      }}
+                    >
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 6 }}>
+                        PRESCRIPTION
+                      </div>
+                      {appointmentPrescriptions.map((item, pIndex) => (
+                        <div key={`${apt._id}-prescription-${pIndex}`} style={{ marginBottom: pIndex < appointmentPrescriptions.length - 1 ? 8 : 0 }}>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--gray-700)', whiteSpace: 'pre-wrap' }}>
+                            {item.prescriptionText || 'Prescription details unavailable.'}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: 4 }}>
+                            Issued {item.dateIssued ? new Date(item.dateIssued).toLocaleString() : 'recently'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             });
@@ -298,7 +416,7 @@ const Patient = () => {
         </div>
 
         {/* Notifications placeholder */}
-        <div className="card">
+        {/* <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>Notifications</h3>
             <BellIcon style={{ width: 18, height: 18, color: 'var(--gray-400)' }} />
@@ -326,10 +444,10 @@ const Patient = () => {
               </div>
             ))
           )}
-        </div>
+        </div> */}
 
         {/* Quick Actions */}
-        <div className="card">
+        {/* <div className="card">
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Quick Actions</h3>
           <div className="grid grid-cols-2 gap-3">
             {[
@@ -353,7 +471,7 @@ const Patient = () => {
               );
             })}
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

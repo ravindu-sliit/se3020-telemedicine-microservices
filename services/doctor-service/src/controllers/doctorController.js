@@ -489,7 +489,7 @@ const getPatientReports = async (req, res) => {
  */
 const issuePrescription = async (req, res) => {
   try {
-    const { patientId, prescriptionText } = req.body;
+    const { patientId, prescriptionText, appointmentId } = req.body;
 
     if (!patientId || !prescriptionText) {
       return res.status(400).json({
@@ -505,6 +505,7 @@ const issuePrescription = async (req, res) => {
         $push: {
           digitalPrescriptions: {
             patientId,
+            appointmentId: appointmentId || '',
             prescriptionText
           }
         }

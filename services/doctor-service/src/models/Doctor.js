@@ -80,6 +80,7 @@ const doctorSchema = new mongoose.Schema({
     },
     digitalPrescriptions: [{
         patientId: { type: String },
+        appointmentId: { type: String, trim: true },
         prescriptionText: { type: String },
         dateIssued: { type: Date, default: Date.now }
     }]
