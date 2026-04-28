@@ -12,7 +12,10 @@ import {
   fetchAllUsers,
   updateUserRole,
   verifyAuthDoctor,
-  rejectAuthDoctor
+  rejectAuthDoctor,
+  fetchAppointmentsAdminOverview,
+  fetchReportsAdminOverview,
+  fetchServiceHealthSummary
 } from '../services/api';
 
 
@@ -42,11 +45,18 @@ const Admin = () => {
 
   const [allUsers, setAllUsers] = useState([]);
   const [isUsersLoading, setIsUsersLoading] = useState(false);
+  const [operationsLoading, setOperationsLoading] = useState(false);
+  const [operationsData, setOperationsData] = useState({
+    appointments: { totalAppointments: 0, byStatus: [], byPaymentStatus: [], latestAppointments: [] },
+    reports: { totalReports: 0, reportsByType: [], latestUploads: [] },
+    services: []
+  });
 
   const sidebarLinks = [
     { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon },
     { id: 'users', label: 'User Management', icon: UserGroupIcon },
-    { id: 'verification', label: 'Verification', icon: ShieldCheckIcon }
+    { id: 'verification', label: 'Verification', icon: ShieldCheckIcon },
+    { id: 'operations', label: 'Operations', icon: ChartBarIcon }
   ];
 
   const loadPendingApplications = useCallback(async () => {
@@ -77,10 +87,41 @@ const Admin = () => {
     }
   }, []);
 
+  const loadOperations = useCallback(async () => {
+    setOperationsLoading(true);
+    try {
+      const [appointmentsResponse, reportsResponse, servicesResponse] = await Promise.all([
+        fetchAppointmentsAdminOverview(),
+        fetchReportsAdminOverview(),
+        fetchServiceHealthSummary()
+      ]);
+
+      setOperationsData({
+        appointments: appointmentsResponse?.data || {
+          totalAppointments: 0,
+          byStatus: [],
+          byPaymentStatus: [],
+          latestAppointments: []
+        },
+        reports: reportsResponse?.data || {
+          totalReports: 0,
+          reportsByType: [],
+          latestUploads: []
+        },
+        services: Array.isArray(servicesResponse?.data) ? servicesResponse.data : []
+      });
+    } catch (error) {
+      setFeedback(error.message || 'Failed to load operations overview.');
+    } finally {
+      setOperationsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadPendingApplications();
     loadAllUsers();
-  }, [loadPendingApplications, loadAllUsers]);
+    loadOperations();
+  }, [loadPendingApplications, loadAllUsers, loadOperations]);
 
   const handleRoleChange = async (userId, newRole) => {
     try {
@@ -458,6 +499,131 @@ const Admin = () => {
     </div>
   );
 
+  const renderOperations = () => {
+    const appointmentStatusMap = Object.fromEntries(
+      (operationsData.appointments.byStatus || []).map((item) => [String(item.status || '').toLowerCase(), item.count])
+    );
+
+    const serviceHealthyCount = (operationsData.services || []).filter((service) => service.status === 'healthy').length;
+
+    return (
+      <div>
+        <div className="grid grid-cols-4 gap-5" style={{ marginBottom: 24 }}>
+          <div className="stat-card">
+            <div style={{ fontSize: '0.85rem', color: 'var(--gray-500)' }}>Total Appointments</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--gray-900)' }}>
+              {operationsData.appointments.totalAppointments || 0}
+            </div>
+          </div>
+          <div className="stat-card">
+            <div style={{ fontSize: '0.85rem', color: 'var(--gray-500)' }}>Completed Appointments</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--gray-900)' }}>
+              {appointmentStatusMap.completed || 0}
+            </div>
+          </div>
+          <div className="stat-card">
+            <div style={{ fontSize: '0.85rem', color: 'var(--gray-500)' }}>Uploaded Reports</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--gray-900)' }}>
+              {operationsData.reports.totalReports || 0}
+            </div>
+          </div>
+          <div className="stat-card">
+            <div style={{ fontSize: '0.85rem', color: 'var(--gray-500)' }}>Healthy Services</div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--gray-900)' }}>
+              {serviceHealthyCount}/{operationsData.services.length || 0}
+            </div>
+          </div>
+        </div>
+
+        {operationsLoading ? (
+          <div className="card">Loading operations metrics...</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-6">
+            <div className="card">
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Appointment Status Mix</h3>
+              {(operationsData.appointments.byStatus || []).length === 0 ? (
+                <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No appointment data available.</div>
+              ) : (
+                (operationsData.appointments.byStatus || []).map((item, index) => (
+                  <div key={index} className="item-row">
+                    <div style={{ fontWeight: 600, color: 'var(--gray-800)' }}>{item.status || 'Unknown'}</div>
+                    <span className="status status-confirmed">{item.count}</span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="card">
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Service Health</h3>
+              {(operationsData.services || []).length === 0 ? (
+                <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No service health data available.</div>
+              ) : (
+                operationsData.services.map((service, index) => (
+                  <div key={index} className="item-row">
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--gray-900)' }}>{service.label}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>{service.details}</div>
+                    </div>
+                    <span className={`status ${service.status === 'healthy' ? 'status-confirmed' : 'status-inactive'}`}>
+                      {service.status}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="card">
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Recent Appointments</h3>
+              {(operationsData.appointments.latestAppointments || []).length === 0 ? (
+                <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No recent appointments found.</div>
+              ) : (
+                operationsData.appointments.latestAppointments.map((appointment, index) => (
+                  <div key={appointment._id || index} className="item-row">
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--gray-900)' }}>
+                        {appointment.patientName || appointment.patientId || 'Patient'}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                        {appointment.doctorName || appointment.doctorId || 'Doctor'} • {formatDate(appointment.appointmentDate)}
+                      </div>
+                    </div>
+                    <span className="status status-pending">{appointment.status || 'Pending'}</span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="card">
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Recent Report Uploads</h3>
+              {(operationsData.reports.latestUploads || []).length === 0 ? (
+                <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No recent report uploads found.</div>
+              ) : (
+                operationsData.reports.latestUploads.map((report, index) => (
+                  <div key={report._id || index} className="item-row">
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--gray-900)' }}>{report.reportType || 'Report'}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
+                        {report.fileName || 'Unnamed file'} • {formatDate(report.uploadedAt)}
+                      </div>
+                    </div>
+                    <span className="status status-confirmed">Uploaded</span>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="card" style={{ gridColumn: '1 / -1' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 16 }}>Disputes & Incidents</h3>
+              <div style={{ color: 'var(--gray-600)', fontSize: '0.9rem' }}>
+                Dispute tracking is not yet integrated into a dedicated microservice. This panel is reserved for future incident workflows.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <DashboardLayout
       title="Admin Dashboard"
@@ -469,6 +635,7 @@ const Admin = () => {
       {activeTab === 'dashboard' && renderDashboard()}
       {activeTab === 'users' && renderUsers()}
       {activeTab === 'verification' && renderVerification()}
+      {activeTab === 'operations' && renderOperations()}
     </DashboardLayout>
   );
 };

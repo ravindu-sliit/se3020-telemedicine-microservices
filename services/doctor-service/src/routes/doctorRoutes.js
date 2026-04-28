@@ -12,6 +12,7 @@ const {
     rejectDoctorApplication,
     getPatientReports,
     issuePrescription,
+    getMyPrescriptions,
     disableDoctorProfile
 } = require('../controllers/doctorController');
 
@@ -34,6 +35,9 @@ router.get('/patients/:patientId/reports', protect, authorizeRoles('doctor'), ge
 
 // Doctor issuing a prescription
 router.post('/prescriptions', protect, authorizeRoles('doctor'), issuePrescription);
+
+// Patient fetching their own prescriptions
+router.get('/prescriptions/me', protect, authorizeRoles('patient'), getMyPrescriptions);
 
 // Doctor disabling their own account (Soft Delete)
 router.put('/disable', protect, authorizeRoles('doctor'), disableDoctorProfile);

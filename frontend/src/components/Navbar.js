@@ -1,3 +1,4 @@
+/* global globalThis */
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { FaHeartbeat } from 'react-icons/fa';
@@ -22,6 +23,7 @@ const Navbar = () => {
         { to: '/home', label: 'Home' },
         { to: '/patient', label: 'Dashboard' },
         { to: '/patient/book-appointment', label: 'Appointment' },
+        { to: '/patient/medical-history', label: 'Medical History' },
         { to: '/patient/symptom-checker', label: 'Symptom Checker' },
         { to: '/patient/profile', label: 'Profile' },
       ]
@@ -29,7 +31,7 @@ const Navbar = () => {
 
   const handleLogout = () => {
     clearSession();
-    window.location.href = '/';
+    globalThis.location.href = '/';
   };
 
   const isLinkActive = linkTo => {
@@ -38,6 +40,54 @@ const Navbar = () => {
     }
     return path === linkTo || (linkTo !== '/home' && path.startsWith(linkTo));
   };
+
+  let rightContent = null;
+  
+  if (isLandingPage) {
+    rightContent = (
+      <>
+        <Link to="/login" className="btn btn-secondary btn-sm" style={{ marginRight: 8 }}>
+          Sign In
+        </Link>
+        <Link to="/register" className="btn btn-primary btn-sm">
+          Sign Up
+        </Link>
+      </>
+    );
+  } else if (isLoggedIn) {
+    rightContent = (
+      <>
+        {links.map((link) => (
+          <Link
+            key={link.to}
+            to={link.to}
+            className={`navbar-link ${isLinkActive(link.to) ? 'active' : ''}`}
+          >
+            {link.label}
+          </Link>
+        ))}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="btn btn-danger btn-sm"
+          style={{ marginLeft: 8 }}
+        >
+          Logout
+        </button>
+      </>
+    );
+  } else if (!isHomePage) {
+    rightContent = (
+      <>
+        <Link to="/login" className="btn btn-secondary btn-sm" style={{ marginRight: 8 }}>
+          Sign In
+        </Link>
+        <Link to="/register" className="btn btn-primary btn-sm">
+          Sign Up
+        </Link>
+      </>
+    );
+  }
 
   return (
     <nav className="navbar">
@@ -49,49 +99,7 @@ const Navbar = () => {
           <span className="navbar-brand-text">MediConnect</span>
         </Link>
         <div className="navbar-links">
-          {isLandingPage ? (
-            <>
-              <Link to="/login" className="btn btn-secondary btn-sm" style={{ marginRight: 8 }}>
-                Sign In
-              </Link>
-              <Link to="/register" className="btn btn-primary btn-sm">
-                Sign Up
-              </Link>
-            </>
-          ) : (
-            <>
-              {isLoggedIn ? (
-                <>
-                  {links.map(link => (
-                    <Link
-                      key={link.to}
-                      to={link.to}
-                      className={`navbar-link ${isLinkActive(link.to) ? 'active' : ''}`}
-                    >
-                      {link.label}
-                    </Link>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="btn btn-danger btn-sm"
-                    style={{ marginLeft: 8 }}
-                  >
-                    Logout
-                  </button>
-                </>
-              ) : !isHomePage ? (
-                <>
-                  <Link to="/login" className="btn btn-secondary btn-sm" style={{ marginRight: 8 }}>
-                    Sign In
-                  </Link>
-                  <Link to="/register" className="btn btn-primary btn-sm">
-                    Sign Up
-                  </Link>
-                </>
-              ) : null}
-            </>
-          )}
+          {rightContent}
         </div>
       </div>
     </nav>

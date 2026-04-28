@@ -1,3 +1,4 @@
+/* eslint-disable react/no-array-index-key, no-nested-ternary */
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -65,6 +66,14 @@ const Patient = () => {
     setActionFeedback({ type: '', message: '' });
   };
 
+  const handleRescheduleDateChange = (event) => {
+    setRescheduleForm((current) => ({ ...current, newAppointmentDate: event.target.value }));
+  };
+
+  const handleRescheduleTimeChange = (event) => {
+    setRescheduleForm((current) => ({ ...current, newTimeSlot: event.target.value }));
+  };
+
   const handleReschedule = async (e) => {
     e.preventDefault();
     if (!rescheduleId) return;
@@ -96,6 +105,42 @@ const Patient = () => {
     });
   };
 
+  const handleJoinMeetingClick = (event) => {
+    const appointmentId = event.currentTarget.dataset.appointmentId;
+    const appointment = appointments.find((item) => item._id === appointmentId);
+    if (appointment) {
+      handleJoinMeeting(appointment);
+    }
+  };
+
+  const handleToggleRescheduleClick = (event) => {
+    const appointmentId = event.currentTarget.dataset.appointmentId;
+    const appointment = appointments.find((item) => item._id === appointmentId);
+
+    if (!appointment) return;
+
+    if (rescheduleId === appointmentId) {
+      setRescheduleId('');
+      return;
+    }
+
+    openReschedule(appointment);
+  };
+
+  const handleCancelClick = (event) => {
+    const appointmentId = event.currentTarget.dataset.appointmentId;
+    if (appointmentId) {
+      handleCancel(appointmentId);
+    }
+  };
+
+  const getAppointmentStatusClass = (status) => {
+    const normalizedStatus = String(status || '').toLowerCase();
+    if (normalizedStatus === 'confirmed') return 'status-confirmed';
+    if (normalizedStatus === 'cancelled') return 'status-inactive';
+    return 'status-pending';
+  };
+
   const upcomingCount = appointments.filter(a => a.status === 'Confirmed' || a.status === 'Pending').length;
 
   const renderDashboard = () => (
@@ -110,7 +155,7 @@ const Patient = () => {
         ].map((stat, i) => {
           const Icon = stat.icon;
           return (
-            <div key={i} className="stat-card">
+            <div key={stat.label} className="stat-card">
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ width: 40, height: 40, borderRadius: 12, background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Icon style={{ width: 20, height: 20, color: stat.color }} />
@@ -142,16 +187,24 @@ const Patient = () => {
             </div>
           )}
 
-          {isLoading ? (
-            <div className="loading-state">Loading appointments...</div>
-          ) : loadError ? (
-            <div className="error-state">{loadError}</div>
-          ) : appointments.length === 0 ? (
-            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem', padding: '16px 0' }}>
-              No appointments yet. <Link to="/patient/book-appointment" style={{ color: 'var(--primary-600)', fontWeight: 600 }}>Book one now</Link>
-            </div>
-          ) : (
-            appointments.slice(0, 4).map((apt, idx) => {
+          {(() => {
+            if (isLoading) {
+              return <div className="loading-state">Loading appointments...</div>;
+            }
+
+            if (loadError) {
+              return <div className="error-state">{loadError}</div>;
+            }
+
+            if (appointments.length === 0) {
+              return (
+                <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem', padding: '16px 0' }}>
+                  No appointments yet. <Link to="/patient/book-appointment" style={{ color: 'var(--primary-600)', fontWeight: 600 }}>Book one now</Link>
+                </div>
+              );
+            }
+
+            return appointments.slice(0, 4).map((apt, idx) => {
               const status = (apt.status || '').toLowerCase();
               const canModify = status === 'pending' || status === 'confirmed';
               const isRescheduling = rescheduleId === apt._id;
@@ -172,7 +225,7 @@ const Patient = () => {
                         </div>
                       </div>
                     </div>
-                    <span className={`status ${status === 'confirmed' ? 'status-confirmed' : status === 'cancelled' ? 'status-inactive' : 'status-pending'}`}>
+                    <span className={`status ${getAppointmentStatusClass(status)}`}>
                       {apt.status || 'pending'}
                     </span>
                   </div>
@@ -183,7 +236,8 @@ const Patient = () => {
                       {status === 'confirmed' && apt.videoMeetingUrl && (
                         <button
                           className="btn btn-success btn-sm"
-                          onClick={() => handleJoinMeeting(apt)}
+                          onClick={handleJoinMeetingClick}
+                          data-appointment-id={apt._id}
                           style={{ marginRight: 'auto' }}
                         >
                           <VideoCameraIcon style={{ width: 14, height: 14 }} /> Join Call
@@ -191,14 +245,16 @@ const Patient = () => {
                       )}
                       <button
                         className="btn btn-secondary btn-sm"
-                        onClick={() => (isRescheduling ? setRescheduleId('') : openReschedule(apt))}
+                        onClick={handleToggleRescheduleClick}
+                        data-appointment-id={apt._id}
                         disabled={actionState.id === apt._id}
                       >
                         {isRescheduling ? 'Close' : 'Reschedule'}
                       </button>
                       <button
                         className="btn btn-danger btn-sm"
-                        onClick={() => handleCancel(apt._id)}
+                        onClick={handleCancelClick}
+                        data-appointment-id={apt._id}
                         disabled={actionState.id === apt._id}
                       >
                         {actionState.id === apt._id && actionState.action === 'cancel' ? 'Cancelling...' : 'Cancel'}
@@ -213,7 +269,7 @@ const Patient = () => {
                         type="date"
                         className="form-input"
                         value={rescheduleForm.newAppointmentDate}
-                        onChange={(e) => setRescheduleForm(cur => ({ ...cur, newAppointmentDate: e.target.value }))}
+                        onChange={handleRescheduleDateChange}
                         required
                         style={{ padding: '8px', minHeight: 'auto', flex: '1 1 140px' }}
                       />
@@ -222,7 +278,7 @@ const Patient = () => {
                         className="form-input"
                         placeholder="HH:MM (e.g. 09:00)"
                         value={rescheduleForm.newTimeSlot}
-                        onChange={(e) => setRescheduleForm(cur => ({ ...cur, newTimeSlot: e.target.value }))}
+                        onChange={handleRescheduleTimeChange}
                         required
                         style={{ padding: '8px', minHeight: 'auto', flex: '1 1 120px' }}
                       />
@@ -237,8 +293,8 @@ const Patient = () => {
                   )}
                 </div>
               );
-            })
-          )}
+            });
+          })()}
         </div>
 
         {/* Notifications placeholder */}
@@ -251,7 +307,7 @@ const Patient = () => {
             <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No new notifications.</div>
           ) : (
             appointments.slice(0, 3).map((apt, idx) => (
-              <div key={idx} style={{
+              <div key={apt._id || `${apt.doctorName}-${apt.appointmentDate}-${idx}`} style={{
                 padding: '14px 16px', background: 'var(--gray-50)', borderRadius: 14,
                 marginBottom: 10, border: '1px solid var(--gray-100)'
               }}>
@@ -278,7 +334,7 @@ const Patient = () => {
             ].map((action, i) => {
               const Icon = action.icon;
               return (
-                <Link key={i} to={action.to} style={{
+                <Link key={action.label} to={action.to} style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
                   borderRadius: 14, border: '1px solid var(--gray-100)', textDecoration: 'none',
                   transition: 'all 0.2s ease', background: 'white'

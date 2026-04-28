@@ -6,7 +6,8 @@ const {
     getPatientAppointments,
     getDoctorAppointments,
     cancelAppointment,
-    rescheduleAppointment 
+    rescheduleAppointment,
+    getAppointmentsAdminOverview
 } = require('../controllers/appointmentController');
 
 const protect = require('../middleware/authMiddleware');
@@ -21,6 +22,9 @@ router.post('/', protect, authorizeRoles('patient'), createAppointment);
 
 // Get all appointments for the logged-in patient
 router.get('/patient/me', protect, authorizeRoles('patient'), getPatientAppointments);
+
+// Get platform-level appointment metrics for admin operations dashboard
+router.get('/admin/overview', protect, authorizeRoles('admin'), getAppointmentsAdminOverview);
 
 // Cancel an appointment
 router.put('/:id/cancel', protect, authorizeRoles('patient'), cancelAppointment);

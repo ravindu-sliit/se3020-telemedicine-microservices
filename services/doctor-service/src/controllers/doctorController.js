@@ -240,17 +240,17 @@ const updateMyDoctorProfile = async (req, res) => {
 
     // Safely apply updates only to allowed fields
     editableDoctorFields.forEach((field) => {
-      if (field === 'qualifications' && Object.prototype.hasOwnProperty.call(req.body, field)) {
+      if (field === 'qualifications' && Object.hasOwn(req.body, field)) {
         doctorProfile[field] = normalizeStringArray(req.body[field]);
         return;
       }
 
-      if (field === 'availability' && Object.prototype.hasOwnProperty.call(req.body, field)) {
+      if (field === 'availability' && Object.hasOwn(req.body, field)) {
         doctorProfile[field] = Array.isArray(req.body[field]) ? req.body[field] : [];
         return;
       }
 
-      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+      if (Object.hasOwn(req.body, field)) {
         doctorProfile[field] = req.body[field];
       }
     });
@@ -319,7 +319,8 @@ const getAllApprovedDoctors = async (req, res) => {
       });
 
       verifiedUsers = Array.isArray(response?.data?.data) ? response.data.data : [];
-    } catch (_error) {
+    } catch (error) {
+      console.warn('Unable to fetch verified doctors from auth service:', error.message);
       verifiedUsers = [];
     }
 
@@ -536,6 +537,48 @@ const issuePrescription = async (req, res) => {
 };
 
 /**
+ * @desc    Fetch prescriptions issued to the logged-in patient
+ * @route   GET /api/doctors/prescriptions/me
+ * @access  Private (Patient role required)
+ */
+const getMyPrescriptions = async (req, res) => {
+  try {
+    const patientId = req.user.id;
+
+    const doctors = await Doctor.find(
+      { 'digitalPrescriptions.patientId': patientId },
+      { fullName: 1, specialty: 1, digitalPrescriptions: 1 }
+    ).lean();
+
+    const prescriptions = doctors
+      .flatMap((doctor) =>
+        (doctor.digitalPrescriptions || [])
+          .filter((entry) => entry.patientId === patientId)
+          .map((entry) => ({
+            ...entry,
+            doctorId: doctor._id,
+            doctorName: doctor.fullName || 'Doctor',
+            specialty: doctor.specialty || 'General Medicine'
+          }))
+      )
+      .sort((a, b) => new Date(b.dateIssued || 0).getTime() - new Date(a.dateIssued || 0).getTime());
+
+    return res.status(200).json({
+      success: true,
+      message: 'Patient prescriptions fetched successfully',
+      count: prescriptions.length,
+      data: prescriptions
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch prescriptions',
+      error: error.message
+    });
+  }
+};
+
+/**
  * @desc    Disable a doctor's profile (Soft Delete)
  * @route   PUT /api/doctors/disable
  * @access  Private (Doctor role required)
@@ -584,5 +627,6 @@ module.exports = {
   rejectDoctorApplication,
   getPatientReports,
   issuePrescription,
+  getMyPrescriptions,
   disableDoctorProfile
 };

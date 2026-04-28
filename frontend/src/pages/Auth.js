@@ -241,6 +241,9 @@ const Auth = () => {
                     <button className="btn btn-primary btn-lg" type="submit" disabled={isSubmitting}>
                       {isSubmitting ? 'Signing In...' : 'Sign In'}
                     </button>
+                    <Link to="/forgot-password" style={{ textAlign: 'center', color: 'var(--primary)' }}>
+                      Forgot password?
+                    </Link>
                   </div>
                 </form>
               ) : (
