@@ -9,6 +9,8 @@ const Navbar = () => {
   const path = location.pathname;
   const session = getSession();
   const isLoggedIn = Boolean(session?.token);
+  const isPatient = session?.user?.role === 'patient';
+  const isLandingPage = path === '/';
   const isHomePage = path === '/home';
   const hideForRoleDashboards = path.startsWith('/admin') || path.startsWith('/doctor');
 
@@ -18,36 +20,54 @@ const Navbar = () => {
 
   const brandPath = isLoggedIn ? '/home' : '/';
 
-  const links = [
-    { to: '/home', label: 'Home' },
-    { to: '/patient/book-appointment', label: 'Appointment' },
-    { to: '/patient/medical-history', label: 'Medical History' },
-    { to: '/patient/symptom-checker', label: 'Symptom Checker' },
-    { to: '/patient/profile', label: 'Profile' },
-  ];
+  const links = isPatient
+    ? [
+        { to: '/home', label: 'Home' },
+        { to: '/patient', label: 'Dashboard' },
+        { to: '/patient/book-appointment', label: 'Appointment' },
+        { to: '/patient/medical-history', label: 'Medical History' },
+        { to: '/patient/symptom-checker', label: 'Symptom Checker' },
+        { to: '/patient/profile', label: 'Profile' },
+      ]
+    : [{ to: '/home', label: 'Home' }];
 
   const handleLogout = () => {
     clearSession();
     globalThis.location.href = '/';
   };
 
+  const isLinkActive = linkTo => {
+    if (linkTo === '/patient') {
+      return path === '/patient';
+    }
+    return path === linkTo || (linkTo !== '/home' && path.startsWith(linkTo));
+  };
+
   let rightContent = null;
-  if (isLoggedIn) {
+  
+  if (isLandingPage) {
     rightContent = (
       <>
-        {links.map((link) => {
-          const isActive = path === link.to || (link.to !== '/home' && path.startsWith(link.to));
-
-          return (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={`navbar-link ${isActive ? 'active' : ''}`}
-            >
-              {link.label}
-            </Link>
-          );
-        })}
+        <Link to="/login" className="btn btn-secondary btn-sm" style={{ marginRight: 8 }}>
+          Sign In
+        </Link>
+        <Link to="/register" className="btn btn-primary btn-sm">
+          Sign Up
+        </Link>
+      </>
+    );
+  } else if (isLoggedIn) {
+    rightContent = (
+      <>
+        {links.map((link) => (
+          <Link
+            key={link.to}
+            to={link.to}
+            className={`navbar-link ${isLinkActive(link.to) ? 'active' : ''}`}
+          >
+            {link.label}
+          </Link>
+        ))}
         <button
           type="button"
           onClick={handleLogout}
