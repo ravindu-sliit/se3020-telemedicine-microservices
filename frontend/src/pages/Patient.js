@@ -127,7 +127,7 @@ const Patient = () => {
         {/* Appointments from API */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>Upcoming Appointments</h3>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>My Appointments</h3>
             <Link to="/patient/book-appointment" style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--primary-600)' }}>Book New</Link>
           </div>
           
