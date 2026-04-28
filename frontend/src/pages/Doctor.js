@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   CalendarIcon, UserGroupIcon, DocumentTextIcon,
   CheckCircleIcon, XCircleIcon, VideoCameraIcon,
-  DocumentPlusIcon, Squares2X2Icon,
-  ClockIcon, UserCircleIcon
+  Squares2X2Icon,
+  ClockIcon, UserCircleIcon, TrashIcon
 } from '@heroicons/react/24/outline';
 import DashboardLayout from '../components/DashboardLayout';
 import {
@@ -11,9 +12,10 @@ import {
   updateAppointmentStatus,
   fetchMyDoctorProfile,
   updateMyDoctorProfile,
-  applyDoctorProfile
+  applyDoctorProfile,
+  deleteMyAccount
 } from '../services/api';
-import { getSession } from '../services/session';
+import { clearSession, getSession } from '../services/session';
 
 const parseAppointmentDateTime = (appointment) => {
   if (!appointment?.appointmentDate) {
@@ -58,7 +60,8 @@ const parseAppointmentDateTime = (appointment) => {
 
 const Doctor = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const session = getSession();
+  const session = useMemo(() => getSession(), []);
+  const navigate = useNavigate();
 
   // Appointment state
   const [appointments, setAppointments] = useState([]);
@@ -71,6 +74,7 @@ const Doctor = () => {
   const [profile, setProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [profileFeedback, setProfileFeedback] = useState({ type: '', message: '' });
   const [profileForm, setProfileForm] = useState({
     fullName: '', specialty: '', yearsOfExperience: '', medicalLicenseNumber: '',
@@ -121,7 +125,7 @@ const Doctor = () => {
     } finally {
       setProfileLoading(false);
     }
-  }, []);
+  }, [session?.user?.fullName]);
 
   useEffect(() => {
     loadAppointments();
@@ -242,7 +246,26 @@ const Doctor = () => {
       return;
     }
 
-    window.open(appointment.videoMeetingUrl, '_blank', 'noopener,noreferrer');
+    navigate(`/telemedicine-room?appointmentId=${encodeURIComponent(appointment._id)}`, {
+      state: { appointment }
+    });
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm('Delete your doctor account? This will remove your login access and cannot be undone.');
+    if (!confirmed) return;
+
+    setIsDeletingAccount(true);
+    setProfileFeedback({ type: '', message: '' });
+
+    try {
+      await deleteMyAccount();
+      clearSession();
+      window.location.href = '/';
+    } catch (error) {
+      setProfileFeedback({ type: 'error', message: error.message || 'Failed to delete your account.' });
+      setIsDeletingAccount(false);
+    }
   };
 
   const renderDashboard = () => (
@@ -299,7 +322,12 @@ const Doctor = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className={`status ${apt.status?.toLowerCase() === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status}</span>
                   {apt.status?.toLowerCase() === 'confirmed' && (
-                    <button className="btn btn-success btn-sm">
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm"
+                      onClick={() => handleJoinMeeting(apt)}
+                      disabled={!apt.videoMeetingUrl}
+                    >
                       <VideoCameraIcon style={{ width: 14, height: 14 }} /> Join
                     </button>
                   )}
@@ -546,6 +574,37 @@ const Doctor = () => {
           </div>
         </form>
       )}
+      {!profileLoading ? (
+        <div
+          style={{
+            borderTop: '1px solid var(--gray-100)',
+            marginTop: 26,
+            paddingTop: 26,
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 16,
+            alignItems: 'center'
+          }}
+        >
+          <div>
+            <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 800, color: '#991b1b' }}>
+              Delete Account
+            </h3>
+            <p style={{ margin: 0, color: 'var(--gray-500)', fontSize: '0.88rem', lineHeight: 1.5 }}>
+              Permanently remove your doctor login account from MediConnect.
+            </p>
+          </div>
+          <button
+            className="btn btn-danger btn-lg"
+            type="button"
+            onClick={handleDeleteAccount}
+            disabled={isDeletingAccount}
+          >
+            <TrashIcon style={{ width: 18, height: 18 }} />
+            {isDeletingAccount ? 'Deleting...' : 'Delete Account'}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 

@@ -124,6 +124,27 @@ export const fetchCurrentUser = async () => {
   return parseResponse(response);
 };
 
+export const updateMyAccount = async (accountData) => {
+  const response = await fetch(`${AUTH_BASE_URL}/auth/me`, {
+    method: 'PUT',
+    headers: buildHeaders({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify(accountData)
+  });
+
+  return parseResponse(response);
+};
+
+export const deleteMyAccount = async () => {
+  const response = await fetch(`${AUTH_BASE_URL}/auth/me`, {
+    method: 'DELETE',
+    headers: buildHeaders()
+  });
+
+  return parseResponse(response);
+};
+
 export const fetchAllUsers = async () => {
   const response = await fetch(`${AUTH_BASE_URL}/auth/users`, {
     headers: buildHeaders()
@@ -509,6 +530,26 @@ export const disableDoctorProfile = async () => {
   const response = await fetch(`${DOCTOR_BASE_URL}/doctors/disable`, {
     method: 'PUT',
     headers: buildHeaders()
+  });
+  return parseResponse(response);
+};
+
+// --- Telemedicine Service ---
+
+export const fetchTelemedicineSession = async (appointmentId) => {
+  const response = await fetch(`${TELEMEDICINE_BASE_URL}/telemedicine/sessions/${appointmentId}`, {
+    headers: buildHeaders()
+  });
+  return parseResponse(response);
+};
+
+export const updateTelemedicineSessionStatus = async (appointmentId, status) => {
+  const response = await fetch(`${TELEMEDICINE_BASE_URL}/telemedicine/sessions/${appointmentId}/status`, {
+    method: 'PUT',
+    headers: buildHeaders({
+      'Content-Type': 'application/json'
+    }),
+    body: JSON.stringify({ status })
   });
   return parseResponse(response);
 };

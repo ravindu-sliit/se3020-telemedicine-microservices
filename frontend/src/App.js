@@ -9,6 +9,8 @@ import Home from './pages/Home';
 import Patient from './pages/Patient';
 import PatientProfile from './pages/PatientProfile';
 import Auth from './pages/Auth';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Doctor from './pages/Doctor';
 import Admin from './pages/Admin';
 import BookAppointment from './pages/BookAppointment';
@@ -48,6 +50,8 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Auth />} />
           <Route path="/register" element={<Auth />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           
           {/* Direct Routes - No authentication required */}
           <Route path="/home" element={<Home />} />
@@ -95,7 +99,10 @@ function App() {
           />
           
           {/* Shared Routes */}
-          <Route path="/telemedicine-room" element={<TelemedicineRoom />} />
+          <Route
+            path="/telemedicine-room"
+            element={<RoleProtectedRoute allowedRoles={['patient', 'doctor']} element={<TelemedicineRoom />} />}
+          />
           
           {/* Fallback Route */}
           <Route path="*" element={<Navigate to="/" />} />

@@ -11,13 +11,15 @@ const {
   requestPasswordReset,
   resetPassword,
   getCurrentUser,
+  updateMyAccount,
   getAllUsers,
   createUserByAdmin,
   updateUserByAdmin,
   getVerifiedDoctors,
   updateUserRole,
   updateUserStatus,
-  deleteUser
+  deleteUser,
+  deleteMyAccount
 } = require('../controllers/authController');
 const protect = require('../middleware/authMiddleware');
 const authorizeRoles = require('../middleware/roleMiddleware');
@@ -31,6 +33,8 @@ router.post('/login', loginUser);
 router.post('/forgot-password', requestPasswordReset);
 router.post('/reset-password', resetPassword);
 router.get('/me', protect, getCurrentUser);
+router.put('/me', protect, authorizeRoles('patient'), updateMyAccount);
+router.delete('/me', protect, authorizeRoles('patient', 'doctor'), deleteMyAccount);
 router.post('/admins', protect, authorizeRoles('admin'), createAdminUser);
 router.patch('/users/:userId/verify-doctor', protect, authorizeRoles('admin'), verifyDoctorUser);
 router.patch('/users/:userId/reject-doctor', protect, authorizeRoles('admin'), rejectDoctorUser);

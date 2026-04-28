@@ -1,15 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { FaVideo, FaRobot, FaFileMedical, FaHeartbeat, FaShieldAlt, FaUserMd, FaCalendarCheck } from 'react-icons/fa';
+import { FaVideo, FaRobot, FaFileMedical, FaHeartbeat, FaShieldAlt } from 'react-icons/fa';
 import { 
   PlayCircleIcon, 
   UserGroupIcon, 
   CalendarDaysIcon, 
   VideoCameraIcon,
-  ArrowRightIcon,
-  CheckCircleIcon
+  ArrowRightIcon
 } from '@heroicons/react/24/outline';
-import Navbar from '../components/Navbar';
 
 const Landing = () => {
   const features = [
@@ -35,8 +33,6 @@ const Landing = () => {
 
   return (
     <div className="page-wrapper">
-      <Navbar />
-
       {/* Hero Section */}
       <section className="hero-gradient" style={{ padding: '80px 0 100px', position: 'relative' }}>
         {/* Decorative orbs */}

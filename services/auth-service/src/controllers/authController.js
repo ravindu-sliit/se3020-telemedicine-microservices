@@ -24,9 +24,12 @@ const validateRequiredCredentials = (fullName, email, password, res) => {
   return true;
 };
 
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
 const registerUser = async (req, res) => {
   try {
-    const { fullName, email, password, role } = req.body;
+    const { fullName, password, role } = req.body;
+    const email = normalizeEmail(req.body.email);
 
     if (!validateRequiredCredentials(fullName, email, password, res)) {
       return;
@@ -79,7 +82,8 @@ const registerUser = async (req, res) => {
 
 const registerDoctorUser = async (req, res) => {
   try {
-    const { fullName, email, password } = req.body;
+    const { fullName, password } = req.body;
+    const email = normalizeEmail(req.body.email);
 
     if (!validateRequiredCredentials(fullName, email, password, res)) {
       return;
@@ -122,7 +126,8 @@ const registerDoctorUser = async (req, res) => {
 
 const bootstrapFirstAdmin = async (req, res) => {
   try {
-    const { fullName, email, password } = req.body;
+    const { fullName, password } = req.body;
+    const email = normalizeEmail(req.body.email);
 
     if (!validateRequiredCredentials(fullName, email, password, res)) {
       return;
@@ -215,7 +220,8 @@ const rejectDoctorUser = (req, res) => updateDoctorVerificationStatus(req, res, 
 
 const createAdminUser = async (req, res) => {
   try {
-    const { fullName, email, password } = req.body;
+    const { fullName, password } = req.body;
+    const email = normalizeEmail(req.body.email);
 
     if (!validateRequiredCredentials(fullName, email, password, res)) {
       return;
@@ -256,7 +262,8 @@ const createAdminUser = async (req, res) => {
 
 const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const email = normalizeEmail(req.body.email);
 
     if (!email || !password) {
       return res.status(400).json({
@@ -309,7 +316,7 @@ const loginUser = async (req, res) => {
 
 const requestPasswordReset = async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = normalizeEmail(req.body.email);
 
     if (!email) {
       return res.status(400).json({
@@ -422,6 +429,52 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
+const updateMyAccount = async (req, res) => {
+  try {
+    const fullName = String(req.body.fullName || '').trim();
+
+    if (!fullName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Full name is required'
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user.role !== 'patient') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only patient accounts can update their name here'
+      });
+    }
+
+    user.fullName = fullName;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Name updated successfully',
+      data: {
+        user: buildUserResponse(user)
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to update name',
+      error: error.message
+    });
+  }
+};
+
 const getAllUsers = async (req, res) => {
   try {
     const users = await User.find().select('-password').sort({ createdAt: -1 });
@@ -434,7 +487,8 @@ const getAllUsers = async (req, res) => {
 
 const createUserByAdmin = async (req, res) => {
   try {
-    const { fullName, email, password, role = 'patient', status = 'active', isVerified } = req.body;
+    const { fullName, password, role = 'patient', status = 'active', isVerified } = req.body;
+    const email = normalizeEmail(req.body.email);
 
     if (!validateRequiredCredentials(fullName, email, password, res)) {
       return;
@@ -478,7 +532,8 @@ const createUserByAdmin = async (req, res) => {
 const updateUserByAdmin = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { fullName, email, password, role, status, isVerified } = req.body;
+    const { fullName, password, role, status, isVerified } = req.body;
+    const email = req.body.email ? normalizeEmail(req.body.email) : undefined;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -637,6 +692,29 @@ const deleteUser = async (req, res) => {
   }
 };
 
+const deleteMyAccount = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (!['patient', 'doctor'].includes(user.role)) {
+      return res.status(403).json({ success: false, message: 'Only patient and doctor accounts can be deleted here' });
+    }
+
+    await User.findByIdAndDelete(user._id);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Your account has been deleted successfully'
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to delete your account', error: error.message });
+  }
+};
+
 module.exports = {
   registerUser,
   registerDoctorUser,
@@ -648,11 +726,13 @@ module.exports = {
   requestPasswordReset,
   resetPassword,
   getCurrentUser,
+  updateMyAccount,
   getAllUsers,
   createUserByAdmin,
   updateUserByAdmin,
   getVerifiedDoctors,
   updateUserRole,
   updateUserStatus,
-  deleteUser
+  deleteUser,
+  deleteMyAccount
 };

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
   UserGroupIcon,
   CheckCircleIcon, XCircleIcon, Squares2X2Icon,
-  ShieldCheckIcon, ChartBarIcon, BanknotesIcon
+  ShieldCheckIcon, ChartBarIcon, BanknotesIcon, TrashIcon, PencilSquareIcon, PlusIcon, XMarkIcon
 } from '@heroicons/react/24/outline';
 import DashboardLayout from '../components/DashboardLayout';
 import {
@@ -10,13 +10,17 @@ import {
   fetchPendingDoctorApplications,
   rejectDoctorApplication,
   fetchAllUsers,
+  createUserAccount,
+  updateUserAccount,
   updateUserRole,
   verifyAuthDoctor,
   rejectAuthDoctor,
+  deleteUserAccount,
   fetchAppointmentsAdminOverview,
   fetchReportsAdminOverview,
   fetchServiceHealthSummary
 } from '../services/api';
+import { getSession } from '../services/session';
 
 
 const formatDate = (dateValue) => {
@@ -35,17 +39,40 @@ const formatCurrency = (value) => {
   return `$${numberValue.toLocaleString()}`;
 };
 
+const emptyUserForm = {
+  fullName: '',
+  email: '',
+  password: '',
+  role: 'patient',
+  status: 'active',
+  isVerified: false
+};
+
 const Admin = () => {
+  const session = useMemo(() => getSession(), []);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [pendingApplications, setPendingApplications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [actionState, setActionState] = useState({ doctorId: '', action: '' });
   const [feedback, setFeedback] = useState('');
+  const [feedbackType, setFeedbackType] = useState('success');
 
   const [allUsers, setAllUsers] = useState([]);
   const [isUsersLoading, setIsUsersLoading] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState('');
+  const [savingUser, setSavingUser] = useState(false);
+  const [userFormMode, setUserFormMode] = useState('');
+  const [editingUserId, setEditingUserId] = useState('');
+  const [userForm, setUserForm] = useState(emptyUserForm);
+  const [userFilters, setUserFilters] = useState({
+    search: '',
+    role: 'all',
+    status: 'all',
+    verification: 'all'
+  });
   const [operationsLoading, setOperationsLoading] = useState(false);
+  const [operationsError, setOperationsError] = useState('');
   const [operationsData, setOperationsData] = useState({
     appointments: { totalAppointments: 0, byStatus: [], byPaymentStatus: [], latestAppointments: [] },
     reports: { totalReports: 0, reportsByType: [], latestUploads: [] },
@@ -89,12 +116,21 @@ const Admin = () => {
 
   const loadOperations = useCallback(async () => {
     setOperationsLoading(true);
+    setOperationsError('');
     try {
-      const [appointmentsResponse, reportsResponse, servicesResponse] = await Promise.all([
+      const [appointmentsResult, reportsResult, servicesResult] = await Promise.allSettled([
         fetchAppointmentsAdminOverview(),
         fetchReportsAdminOverview(),
         fetchServiceHealthSummary()
       ]);
+
+      const appointmentsResponse =
+        appointmentsResult.status === 'fulfilled' ? appointmentsResult.value : null;
+      const reportsResponse = reportsResult.status === 'fulfilled' ? reportsResult.value : null;
+      const servicesResponse = servicesResult.status === 'fulfilled' ? servicesResult.value : null;
+      const failedMessages = [appointmentsResult, reportsResult, servicesResult]
+        .filter((result) => result.status === 'rejected')
+        .map((result) => result.reason?.message || 'Failed to load an operations metric');
 
       setOperationsData({
         appointments: appointmentsResponse?.data || {
@@ -110,8 +146,12 @@ const Admin = () => {
         },
         services: Array.isArray(servicesResponse?.data) ? servicesResponse.data : []
       });
+
+      if (failedMessages.length > 0) {
+        setOperationsError(failedMessages.join(' '));
+      }
     } catch (error) {
-      setFeedback(error.message || 'Failed to load operations overview.');
+      setOperationsError(error.message || 'Failed to load operations overview.');
     } finally {
       setOperationsLoading(false);
     }
@@ -127,15 +167,164 @@ const Admin = () => {
     try {
       await updateUserRole(userId, newRole);
       await loadAllUsers();
+      setFeedbackType('success');
       setFeedback(`User role successfully changed to ${newRole}.`);
       
       // Clear feedback after 3 seconds
       setTimeout(() => setFeedback(''), 3000);
     } catch (error) {
+      setFeedbackType('error');
       setFeedback(error.message || 'Failed to update user role.');
       setTimeout(() => setFeedback(''), 3000);
     }
   };
+
+  const resetUserForm = () => {
+    setUserForm(emptyUserForm);
+    setUserFormMode('');
+    setEditingUserId('');
+    setSavingUser(false);
+  };
+
+  const handleStartCreateUser = () => {
+    setFeedback('');
+    setUserForm(emptyUserForm);
+    setEditingUserId('');
+    setUserFormMode('create');
+  };
+
+  const handleStartEditUser = (user) => {
+    const userId = user.id || user._id;
+    if (!userId) return;
+
+    setFeedback('');
+    setEditingUserId(userId);
+    setUserFormMode('edit');
+    setUserForm({
+      fullName: user.fullName || '',
+      email: user.email || '',
+      password: '',
+      role: user.role || 'patient',
+      status: user.status || 'active',
+      isVerified: Boolean(user.isVerified)
+    });
+  };
+
+  const handleUserFormChange = (event) => {
+    const { name, type, checked, value } = event.target;
+    setUserForm((current) => ({
+      ...current,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleUserFilterChange = (event) => {
+    const { name, value } = event.target;
+    setUserFilters((current) => ({
+      ...current,
+      [name]: value
+    }));
+  };
+
+  const handleUserFormSubmit = async (event) => {
+    event.preventDefault();
+    setFeedback('');
+
+    if (userFormMode === 'create' && !userForm.password.trim()) {
+      setFeedbackType('error');
+      setFeedback('Password is required for new users.');
+      return;
+    }
+
+    const payload = {
+      fullName: userForm.fullName.trim(),
+      email: userForm.email.trim(),
+      role: userForm.role,
+      status: userForm.status,
+      isVerified: userForm.role === 'admin' ? true : userForm.isVerified
+    };
+
+    if (userForm.password.trim()) {
+      payload.password = userForm.password;
+    }
+
+    setSavingUser(true);
+
+    try {
+      if (userFormMode === 'edit') {
+        await updateUserAccount(editingUserId, payload);
+      } else {
+        await createUserAccount(payload);
+      }
+
+      await loadAllUsers();
+      setFeedbackType('success');
+      setFeedback(userFormMode === 'edit' ? 'User updated successfully.' : 'User created successfully.');
+      resetUserForm();
+      setTimeout(() => setFeedback(''), 3000);
+    } catch (error) {
+      setFeedbackType('error');
+      setFeedback(error.message || 'Failed to save user.');
+    } finally {
+      setSavingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    const userId = user.id || user._id;
+    if (!userId) return;
+
+    if (userId === session?.user?.id) {
+      setFeedbackType('error');
+      setFeedback('You cannot delete your own admin account.');
+      setTimeout(() => setFeedback(''), 3000);
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete ${user.fullName || user.email || 'this user'}? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    setDeletingUserId(userId);
+    setFeedback('');
+
+    try {
+      await deleteUserAccount(userId);
+      await loadAllUsers();
+      setFeedbackType('success');
+      setFeedback('User profile deleted successfully.');
+      setTimeout(() => setFeedback(''), 3000);
+    } catch (error) {
+      setFeedbackType('error');
+      setFeedback(error.message || 'Failed to delete user profile.');
+      setTimeout(() => setFeedback(''), 3000);
+    } finally {
+      setDeletingUserId('');
+    }
+  };
+
+  const filteredUsers = useMemo(() => {
+    const query = userFilters.search.trim().toLowerCase();
+
+    return allUsers.filter((user) => {
+      const status = user.status || 'active';
+      const searchableValues = [user.fullName, user.email, user.role, status]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      const matchesSearch = !query || searchableValues.includes(query);
+      const matchesRole = userFilters.role === 'all' || user.role === userFilters.role;
+      const matchesStatus = userFilters.status === 'all' || status === userFilters.status;
+      const matchesVerification =
+        userFilters.verification === 'all' ||
+        (userFilters.verification === 'verified' && user.isVerified) ||
+        (userFilters.verification === 'unverified' && !user.isVerified);
+
+      return matchesSearch && matchesRole && matchesStatus && matchesVerification;
+    });
+  }, [allUsers, userFilters]);
+
+  const visibleUserCount = filteredUsers.length;
 
   const platformStats = useMemo(() => {
     const pendingCount = pendingApplications.length;
@@ -376,47 +565,233 @@ const Admin = () => {
 
   const renderUsers = () => (
     <div className="card">
-      <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Platform Users</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 20 }}>
+        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>Platform Users</h3>
+        <button className="btn btn-primary btn-sm" type="button" onClick={handleStartCreateUser}>
+          <PlusIcon style={{ width: 14, height: 14 }} />
+          New User
+        </button>
+      </div>
+
       {feedback && activeTab === 'users' ? (
-        <div style={{ marginBottom: 16, padding: '10px', borderRadius: 8, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
+        <div
+          style={{
+            marginBottom: 16,
+            padding: '10px',
+            borderRadius: 8,
+            background: feedbackType === 'error' ? '#fef2f2' : '#f0fdf4',
+            color: feedbackType === 'error' ? '#b91c1c' : '#166534',
+            border: `1px solid ${feedbackType === 'error' ? '#fecaca' : '#bbf7d0'}`
+          }}
+        >
           {feedback}
         </div>
       ) : null}
-      
+
+      {userFormMode ? (
+        <form
+          onSubmit={handleUserFormSubmit}
+          style={{
+            padding: 18,
+            border: '1px solid var(--gray-100)',
+            borderRadius: 12,
+            background: '#f8fafc',
+            marginBottom: 18
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+            <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 800 }}>
+              {userFormMode === 'edit' ? 'Edit User' : 'Create User'}
+            </h4>
+            <button className="btn btn-secondary btn-sm" type="button" onClick={resetUserForm} disabled={savingUser}>
+              <XMarkIcon style={{ width: 14, height: 14 }} />
+              Cancel
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4" style={{ marginBottom: 14 }}>
+            <label>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>Full Name</div>
+              <input
+                className="form-input"
+                name="fullName"
+                value={userForm.fullName}
+                onChange={handleUserFormChange}
+                required
+              />
+            </label>
+            <label>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>Email</div>
+              <input
+                className="form-input"
+                type="email"
+                name="email"
+                value={userForm.email}
+                onChange={handleUserFormChange}
+                required
+              />
+            </label>
+            <label>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>
+                {userFormMode === 'edit' ? 'New Password' : 'Password'}
+              </div>
+              <input
+                className="form-input"
+                type="password"
+                name="password"
+                value={userForm.password}
+                onChange={handleUserFormChange}
+                minLength={6}
+                required={userFormMode === 'create'}
+                placeholder={userFormMode === 'edit' ? 'Leave blank to keep current' : 'At least 6 characters'}
+              />
+            </label>
+            <label>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>Role</div>
+              <select className="form-input" name="role" value={userForm.role} onChange={handleUserFormChange}>
+                <option value="patient">Patient</option>
+                <option value="doctor">Doctor</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <label>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gray-600)', marginBottom: 6 }}>Status</div>
+              <select className="form-input" name="status" value={userForm.status} onChange={handleUserFormChange}>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 24, fontSize: '0.9rem', fontWeight: 700 }}>
+              <input
+                type="checkbox"
+                name="isVerified"
+                checked={userForm.role === 'admin' ? true : userForm.isVerified}
+                onChange={handleUserFormChange}
+                disabled={userForm.role === 'admin'}
+              />
+              Verified
+            </label>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button className="btn btn-primary btn-sm" type="submit" disabled={savingUser}>
+              {savingUser ? 'Saving...' : userFormMode === 'edit' ? 'Save Changes' : 'Create User'}
+            </button>
+          </div>
+        </form>
+      ) : null}
+
+      <div className="grid grid-cols-4 gap-3" style={{ marginBottom: 12 }}>
+        <input
+          className="form-input"
+          name="search"
+          value={userFilters.search}
+          onChange={handleUserFilterChange}
+          placeholder="Search users"
+          aria-label="Search users"
+        />
+        <select className="form-input" name="role" value={userFilters.role} onChange={handleUserFilterChange} aria-label="Filter by role">
+          <option value="all">All roles</option>
+          <option value="patient">Patients</option>
+          <option value="doctor">Doctors</option>
+          <option value="admin">Admins</option>
+        </select>
+        <select className="form-input" name="status" value={userFilters.status} onChange={handleUserFilterChange} aria-label="Filter by status">
+          <option value="all">All statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="suspended">Suspended</option>
+        </select>
+        <select
+          className="form-input"
+          name="verification"
+          value={userFilters.verification}
+          onChange={handleUserFilterChange}
+          aria-label="Filter by verification"
+        >
+          <option value="all">All verification</option>
+          <option value="verified">Verified</option>
+          <option value="unverified">Unverified</option>
+        </select>
+      </div>
+
+      <div style={{ color: 'var(--gray-500)', fontSize: '0.82rem', marginBottom: 14 }}>
+        Showing {visibleUserCount} of {allUsers.length} users
+      </div>
+
       {isUsersLoading ? (
         <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>Loading users...</div>
       ) : allUsers.length === 0 ? (
         <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No users found.</div>
+      ) : filteredUsers.length === 0 ? (
+        <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No users match the selected filters.</div>
       ) : (
         <div className="space-y-3">
-          {allUsers.map((user) => (
-            <div key={user.id} className="item-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <UserGroupIcon style={{ width: 18, height: 18, color: 'var(--primary-600)' }} />
+          {filteredUsers.map((user) => {
+            const userId = user.id || user._id;
+            const status = user.status || 'active';
+            const isCurrentUser = session?.user?.id === userId;
+
+            return (
+              <div
+                key={userId}
+                className="item-row"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <UserGroupIcon style={{ width: 18, height: 18, color: 'var(--primary-600)' }} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>{user.fullName}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>{user.email}</div>
+                  </div>
                 </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>{user.fullName}</div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>{user.email}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <span className={`status ${user.role === 'admin' ? 'status-confirmed' : user.role === 'doctor' ? 'status-pending' : 'status-active'}`}>
+                    {user.role}
+                  </span>
+                  <span className={`status ${status === 'active' ? 'status-confirmed' : 'status-inactive'}`}>
+                    {status}
+                  </span>
+                  <span className={`status ${user.isVerified ? 'status-confirmed' : 'status-pending'}`}>
+                    {user.isVerified ? 'verified' : 'unverified'}
+                  </span>
+                  <select
+                    className="form-input"
+                    value={user.role}
+                    onChange={(e) => handleRoleChange(userId, e.target.value)}
+                    style={{ padding: '6px 28px 6px 12px', fontSize: '0.85rem', width: 120, height: 'auto', minHeight: 32 }}
+                  >
+                    <option value="patient">Patient</option>
+                    <option value="doctor">Doctor</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    type="button"
+                    onClick={() => handleStartEditUser(user)}
+                    style={{ minWidth: 78, justifyContent: 'center' }}
+                  >
+                    <PencilSquareIcon style={{ width: 14, height: 14 }} />
+                    Edit
+                  </button>
+                  <button
+                    className="btn btn-danger btn-sm"
+                    type="button"
+                    onClick={() => handleDeleteUser(user)}
+                    disabled={deletingUserId === userId || isCurrentUser}
+                    title={isCurrentUser ? 'You cannot delete your own account' : 'Delete user profile'}
+                    style={{ minWidth: 92, justifyContent: 'center' }}
+                  >
+                    <TrashIcon style={{ width: 14, height: 14 }} />
+                    {deletingUserId === userId ? 'Deleting...' : 'Delete'}
+                  </button>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span className={`status ${user.role === 'admin' ? 'status-confirmed' : user.role === 'doctor' ? 'status-pending' : 'status-inactive'}`}>
-                  {user.role}
-                </span>
-                <select 
-                  className="form-input" 
-                  value={user.role} 
-                  onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                  style={{ padding: '6px 28px 6px 12px', fontSize: '0.85rem', width: 120, height: 'auto', minHeight: 32 }}
-                >
-                  <option value="patient">Patient</option>
-                  <option value="doctor">Doctor</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -537,6 +912,18 @@ const Admin = () => {
 
         {operationsLoading ? (
           <div className="card">Loading operations metrics...</div>
+        ) : operationsError ? (
+          <div
+            className="card"
+            style={{
+              border: '1px solid #fecaca',
+              background: '#fef2f2',
+              color: '#b91c1c',
+              fontSize: '0.9rem'
+            }}
+          >
+            {operationsError}
+          </div>
         ) : (
           <div className="grid grid-cols-2 gap-6">
             <div className="card">

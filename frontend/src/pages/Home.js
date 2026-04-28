@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CalendarIcon, UserGroupIcon, DocumentTextIcon, CogIcon,
   VideoCameraIcon
@@ -73,6 +73,7 @@ const getStatusClass = (status) => {
 
 const Home = () => {
   const session = getSession();
+  const navigate = useNavigate();
   const [appointments, setAppointments] = useState([]);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [appointmentsError, setAppointmentsError] = useState('');
@@ -170,7 +171,9 @@ const Home = () => {
 
   const handleJoinMeeting = (appointment) => {
     if (appointment?.videoMeetingUrl) {
-      window.open(appointment.videoMeetingUrl, '_blank', 'noopener,noreferrer');
+      navigate(`/telemedicine-room?appointmentId=${encodeURIComponent(appointment._id)}`, {
+        state: { appointment }
+      });
     }
   };
 

@@ -4,9 +4,11 @@ import {
   createPatientProfile, 
   fetchPatientProfile, 
   updatePatientProfile,
-  uploadMedicalReport 
+  uploadMedicalReport,
+  updateMyAccount,
+  deleteMyAccount
 } from '../services/api';
-import { getSession } from '../services/session';
+import { clearSession, getSession, saveSession } from '../services/session';
 import {
   DocumentArrowUpIcon,
   ExclamationTriangleIcon,
@@ -14,6 +16,7 @@ import {
   MapPinIcon,
   PhoneIcon,
   ShieldCheckIcon,
+  TrashIcon,
   UserCircleIcon
 } from '@heroicons/react/24/outline';
 
@@ -96,9 +99,11 @@ const SectionHeader = ({ icon: Icon, title, subtitle }) => (
 
 const PatientProfile = () => {
   const session = React.useMemo(() => getSession(), []);
+  const [accountName, setAccountName] = React.useState(session?.user?.fullName || '');
   const [form, setForm] = React.useState(emptyProfile);
   const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = React.useState(false);
   const [hasExistingProfile, setHasExistingProfile] = React.useState(false);
   const [profileId, setProfileId] = React.useState('');
   const [feedback, setFeedback] = React.useState({ type: '', message: '' });
@@ -166,6 +171,13 @@ const PatientProfile = () => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const fullName = accountName.trim();
+
+    if (!fullName) {
+      setFeedback({ type: 'error', message: 'Full name is required.' });
+      return;
+    }
+
     setIsSaving(true);
     setFeedback({ type: '', message: '' });
 
@@ -185,13 +197,38 @@ const PatientProfile = () => {
       const response = hasExistingProfile
         ? await updatePatientProfile(session.user.id, payload)
         : await createPatientProfile(payload);
+      const currentSession = getSession() || session;
+      const shouldUpdateName = fullName !== currentSession?.user?.fullName;
+
+      let updatedUser = null;
+      if (shouldUpdateName) {
+        const accountResponse = await updateMyAccount({ fullName });
+        updatedUser = accountResponse?.data?.user || null;
+      }
+
+      if (updatedUser) {
+        const updatedSession = {
+          ...currentSession,
+          user: {
+            ...currentSession.user,
+            ...updatedUser
+          }
+        };
+
+        saveSession(updatedSession);
+        setAccountName(updatedSession.user.fullName);
+      }
 
       setForm(mapProfileToForm(response.data));
       setHasExistingProfile(true);
       setProfileId(response.data?._id || '');
       setFeedback({
         type: 'success',
-        message: hasExistingProfile ? 'Patient profile updated successfully.' : 'Patient profile created successfully.'
+        message: shouldUpdateName
+          ? 'Name and patient profile updated successfully.'
+          : hasExistingProfile
+            ? 'Patient profile updated successfully.'
+            : 'Patient profile created successfully.'
       });
     } catch (error) {
       setFeedback({ type: 'error', message: error.message });
@@ -237,6 +274,23 @@ const PatientProfile = () => {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm('Delete your patient account? This will remove your login access and cannot be undone.');
+    if (!confirmed) return;
+
+    setIsDeletingAccount(true);
+    setFeedback({ type: '', message: '' });
+
+    try {
+      await deleteMyAccount();
+      clearSession();
+      window.location.href = '/';
+    } catch (error) {
+      setFeedback({ type: 'error', message: error.message || 'Failed to delete your account.' });
+      setIsDeletingAccount(false);
+    }
+  };
+
   return (
     <div className="page-wrapper">
       <Navbar />
@@ -254,10 +308,10 @@ const PatientProfile = () => {
               <div style={{ borderRadius: 16, padding: 22, background: '#f8fafc', border: '1px solid var(--gray-100)' }}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 18 }}>
                   <div style={{ width: 64, height: 64, borderRadius: 16, background: '#2563eb', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', fontWeight: 800 }}>
-                    {(session?.user?.fullName || 'P').slice(0, 1).toUpperCase()}
+                    {(accountName || 'P').slice(0, 1).toUpperCase()}
                   </div>
-                  <div>
-                    <h2 style={{ margin: '0 0 4px', fontSize: '1.28rem', fontWeight: 800 }}>{session?.user?.fullName || 'Guest'}</h2>
+                  <div style={{ flex: 1 }}>
+                    <h2 style={{ margin: '0 0 4px', fontSize: '1.28rem', fontWeight: 800 }}>{accountName || 'Guest'}</h2>
                     <p style={{ color: 'var(--gray-500)', margin: 0, fontSize: '0.9rem' }}>{session?.user?.email || 'Not signed in'}</p>
                   </div>
                 </div>
@@ -351,6 +405,16 @@ const PatientProfile = () => {
                 />
                 <div className="grid grid-cols-2 gap-5">
                   <label>
+                    <div style={fieldLabelStyle}>Full Name</div>
+                    <input
+                      className="input"
+                      value={accountName}
+                      onChange={(event) => setAccountName(event.target.value)}
+                      placeholder="Full name"
+                      required
+                    />
+                  </label>
+                  <label>
                     <div style={fieldLabelStyle}>Phone</div>
                     <input className="input" name="phone" value={form.phone} onChange={updateField} placeholder="+94 77 123 4567" required />
                   </label>
@@ -436,6 +500,36 @@ const PatientProfile = () => {
                 </div>
               </form>
             )}
+
+            {!isLoading && session?.user?.id ? (
+              <div
+                style={{
+                  ...sectionStyle,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 16,
+                  alignItems: 'center'
+                }}
+              >
+                <div>
+                  <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 800, color: '#991b1b' }}>
+                    Delete Account
+                  </h3>
+                  <p style={{ margin: 0, color: 'var(--gray-500)', fontSize: '0.88rem', lineHeight: 1.5 }}>
+                    Permanently remove your patient login account from MediConnect.
+                  </p>
+                </div>
+                <button
+                  className="btn btn-danger btn-lg"
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={isDeletingAccount}
+                >
+                  <TrashIcon style={{ width: 18, height: 18 }} />
+                  {isDeletingAccount ? 'Deleting...' : 'Delete Account'}
+                </button>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

@@ -9,7 +9,7 @@ const Appointment = require('../models/Appointment');
 const { sendAppointmentNotifications } = require('../utils/appointmentNotifications');
 
 const TELEMEDICINE_API_URL =
-  process.env.TELEMEDICINE_API_URL || 'http://telemedicine-service:5008/api/telemedicine';
+  process.env.TELEMEDICINE_API_URL || 'http://localhost:5008/api/telemedicine';
 
 /**
  * Request a secure video session from the Telemedicine Microservice.

@@ -484,7 +484,7 @@ const BookAppointment = () => {
         )}
         <div className="grid grid-cols-2 gap-4" style={{ marginBottom: 20 }}>
           <Link to="/patient" className="btn btn-secondary">Go to Dashboard</Link>
-          <Link to="/telemedicine-room" className="btn btn-primary">Join Video Call</Link>
+          <Link to="/home" className="btn btn-primary">View Appointment Status</Link>
         </div>
         <div style={{ background: 'var(--warning-50)', border: '1px solid var(--warning-200)', borderRadius: 12, padding: 14 }}>
           <p style={{ fontSize: '0.8rem', color: 'var(--warning-800)', marginBottom: 0 }}>

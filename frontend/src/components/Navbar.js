@@ -16,6 +16,8 @@ const Navbar = () => {
     return null;
   }
 
+  const brandPath = isLoggedIn ? '/home' : '/';
+
   const links = [
     { to: '/home', label: 'Home' },
     { to: '/patient/book-appointment', label: 'Appointment' },
@@ -72,7 +74,7 @@ const Navbar = () => {
   return (
     <nav className="navbar">
       <div className="navbar-inner">
-        <Link to="/" className="navbar-brand">
+        <Link to={brandPath} className="navbar-brand">
           <div className="navbar-brand-icon">
             <FaHeartbeat style={{ color: 'white', fontSize: '18px' }} />
           </div>

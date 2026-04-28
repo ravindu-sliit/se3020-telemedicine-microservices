@@ -100,7 +100,7 @@ const Patient = () => {
 
   const handleJoinMeeting = (appointment) => {
     if (!appointment?.videoMeetingUrl) return;
-    navigate('/telemedicine-room', {
+    navigate(`/telemedicine-room?appointmentId=${encodeURIComponent(appointment._id)}`, {
       state: { appointment }
     });
   };
