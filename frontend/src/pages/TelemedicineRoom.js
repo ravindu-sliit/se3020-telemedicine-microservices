@@ -1,18 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   VideoCameraIcon, ComputerDesktopIcon, ChatBubbleLeftRightIcon,
   DocumentTextIcon, PencilSquareIcon, PhoneIcon, ArrowLeftIcon,
   UserIcon, ClockIcon, CheckCircleIcon, SpeakerWaveIcon,
   SpeakerXMarkIcon, PaperAirplaneIcon, DocumentPlusIcon
 } from '@heroicons/react/24/outline';
+import { getSession } from '../services/session';
 
 const TelemedicineRoom = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const session = getSession();
+  
+  // Extract the appointment details passed from the Patient or Doctor dashboard
+  const appointment = location.state?.appointment || {};
+
   const [isConnected, setIsConnected] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoOff, setIsVideoOff] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [sessionTime, setSessionTime] = useState(0);
   const [chatMessages, setChatMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
@@ -23,12 +27,25 @@ const TelemedicineRoom = () => {
   const [prescription, setPrescription] = useState({ medication: '', dosage: '', duration: '', instructions: '' });
   const chatEndRef = useRef(null);
 
-  const sessionData = { doctor: 'Dr. Sarah Johnson', patient: 'John Doe', specialty: 'Cardiology', scheduledTime: '10:00 AM', duration: '30 minutes' };
+  // Derive display names based on who is logged in
+  const isDoctor = session?.user?.role === 'doctor';
+  const myName = session?.user?.fullName || 'User';
+  const otherPersonName = isDoctor ? (appointment.patientName || 'Patient') : (appointment.doctorName || 'Doctor');
+
+  // Kick user out if they navigated here directly without an appointment
+  useEffect(() => {
+    if (!appointment._id) {
+      navigate(isDoctor ? '/doctor' : '/patient');
+    }
+  }, [appointment, navigate, isDoctor]);
 
   useEffect(() => {
-    const timer = setInterval(() => setSessionTime(p => p + 1), 1000);
+    let timer;
+    if (isConnected) {
+      timer = setInterval(() => setSessionTime(p => p + 1), 1000);
+    }
     return () => clearInterval(timer);
-  }, []);
+  }, [isConnected]);
 
   useEffect(() => { chatEndRef.current && (chatEndRef.current.scrollTop = chatEndRef.current.scrollHeight); }, [chatMessages]);
 
@@ -36,28 +53,21 @@ const TelemedicineRoom = () => {
 
   const handleConnect = () => {
     setIsConnected(true);
-    setChatMessages([{ id: 1, type: 'system', message: 'Video consultation started', time: new Date().toLocaleTimeString() }]);
+    setChatMessages([{ id: 1, type: 'system', message: 'Secure video consultation started', time: new Date().toLocaleTimeString() }]);
   };
 
-  const handleDisconnect = () => { setIsConnected(false); navigate('/patient'); };
+  const handleDisconnect = () => { 
+    setIsConnected(false); 
+    navigate(isDoctor ? '/doctor' : '/patient'); 
+  };
 
   const handleSendMessage = () => {
     if (!newMessage.trim()) return;
     setChatMessages(prev => [...prev, { id: Date.now(), type: 'user', message: newMessage, time: new Date().toLocaleTimeString() }]);
     setNewMessage('');
-    setTimeout(() => {
-      setChatMessages(prev => [...prev, { id: Date.now()+1, type: 'doctor', message: 'Thank you for your message. I understand your concern.', time: new Date().toLocaleTimeString() }]);
-    }, 2000);
   };
 
-  const ControlBtn = ({ active, danger, onClick, children }) => (
-    <button onClick={onClick} style={{
-      width: 48, height: 48, borderRadius: 16, border: 'none', cursor: 'pointer',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: danger ? '#ef4444' : active ? 'var(--primary-600)' : 'rgba(255,255,255,0.1)',
-      color: 'white', transition: 'all 0.2s ease', backdropFilter: 'blur(10px)',
-    }}>{children}</button>
-  );
+  if (!appointment._id) return null; // Prevent rendering if redirecting
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f0f1a', color: 'white', fontFamily: 'var(--font-sans)' }}>
@@ -68,7 +78,7 @@ const TelemedicineRoom = () => {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button onClick={() => navigate('/patient')} style={{
+          <button onClick={handleDisconnect} style={{
             padding: 8, border: 'none', background: 'rgba(255,255,255,0.06)', borderRadius: 10,
             color: 'white', cursor: 'pointer', display: 'flex'
           }}>
@@ -76,7 +86,7 @@ const TelemedicineRoom = () => {
           </button>
           <div>
             <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>Video Consultation</div>
-            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>{sessionData.doctor} • {sessionData.patient}</div>
+            <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>{myName} • {otherPersonName}</div>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -102,6 +112,7 @@ const TelemedicineRoom = () => {
 
       {/* Main */}
       <div style={{ display: 'flex', height: 'calc(100vh - 60px)' }}>
+        
         {/* Video Area */}
         <div style={{ flex: 1, position: 'relative', background: 'linear-gradient(180deg, #0f0f1a 0%, #1a1a2e 100%)' }}>
           {!isConnected ? (
@@ -116,71 +127,30 @@ const TelemedicineRoom = () => {
                 </div>
                 <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 8, color: 'white' }}>Ready to Start</h2>
                 <p style={{ color: 'rgba(255,255,255,0.4)', marginBottom: 28, fontSize: '0.9rem' }}>
-                  Click below to connect with {sessionData.doctor}
+                  Click below to connect with {otherPersonName}
                 </p>
-                <button onClick={handleConnect} style={{
-                  padding: '12px 32px', borderRadius: 14, border: 'none', cursor: 'pointer',
-                  background: 'linear-gradient(135deg, var(--primary-500), var(--secondary-500))',
+                <button onClick={handleConnect} disabled={!appointment.videoMeetingUrl} style={{
+                  padding: '12px 32px', borderRadius: 14, border: 'none', cursor: appointment.videoMeetingUrl ? 'pointer' : 'not-allowed',
+                  background: appointment.videoMeetingUrl ? 'linear-gradient(135deg, var(--primary-500), var(--secondary-500))' : '#374151',
                   color: 'white', fontWeight: 700, fontSize: '0.9rem', display: 'inline-flex',
-                  alignItems: 'center', gap: 8, boxShadow: '0 4px 20px rgba(79,70,229,0.4)',
-                  fontFamily: 'var(--font-sans)'
+                  alignItems: 'center', gap: 8, boxShadow: appointment.videoMeetingUrl ? '0 4px 20px rgba(79,70,229,0.4)' : 'none',
+                  fontFamily: 'var(--font-sans)', opacity: appointment.videoMeetingUrl ? 1 : 0.5
                 }}>
-                  <VideoCameraIcon style={{ width: 20, height: 20 }} /> Start Video Call
+                  <VideoCameraIcon style={{ width: 20, height: 20 }} /> 
+                  {appointment.videoMeetingUrl ? 'Start Video Call' : 'Meeting Link Not Ready'}
                 </button>
               </div>
             </div>
           ) : (
-            <>
-              {/* Doctor Video */}
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{
-                    width: 80, height: 80, borderRadius: 24, background: 'rgba(255,255,255,0.06)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px'
-                  }}>
-                    <UserIcon style={{ width: 36, height: 36, color: 'rgba(255,255,255,0.3)' }} />
-                  </div>
-                  <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem', marginBottom: 0 }}>{sessionData.doctor}</p>
-                </div>
-              </div>
-              {/* Self Video */}
-              <div style={{
-                position: 'absolute', bottom: 80, right: 20, width: 180, height: 130,
-                borderRadius: 16, background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{
-                    width: 44, height: 44, borderRadius: 14, background: 'rgba(255,255,255,0.06)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 8px'
-                  }}>
-                    <UserIcon style={{ width: 22, height: 22, color: 'rgba(255,255,255,0.3)' }} />
-                  </div>
-                  <p style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.4)', marginBottom: 0 }}>You</p>
-                </div>
-              </div>
-              {/* Controls */}
-              <div style={{
-                position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
-                display: 'flex', gap: 10, padding: '10px 20px', borderRadius: 20,
-                background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(16px)',
-                border: '1px solid rgba(255,255,255,0.08)'
-              }}>
-                <ControlBtn active={false} onClick={() => setIsMuted(!isMuted)}>
-                  {isMuted ? <SpeakerXMarkIcon style={{ width: 22, height: 22 }} /> : <SpeakerWaveIcon style={{ width: 22, height: 22 }} />}
-                </ControlBtn>
-                <ControlBtn active={false} onClick={() => setIsVideoOff(!isVideoOff)}>
-                  <VideoCameraIcon style={{ width: 22, height: 22 }} />
-                </ControlBtn>
-                <ControlBtn active={isScreenSharing} onClick={() => setIsScreenSharing(!isScreenSharing)}>
-                  <ComputerDesktopIcon style={{ width: 22, height: 22 }} />
-                </ControlBtn>
-                <ControlBtn danger onClick={handleDisconnect}>
-                  <PhoneIcon style={{ width: 22, height: 22 }} />
-                </ControlBtn>
-              </div>
-            </>
+            /* ACTIVE JITSI IFRAME */
+            <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+              <iframe
+                src={`${appointment.videoMeetingUrl}#userInfo.displayName="${myName}"`}
+                allow="camera; microphone; fullscreen; display-capture; autoplay"
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                title="Secure Telemedicine Consultation"
+              />
+            </div>
           )}
         </div>
 
@@ -256,6 +226,7 @@ const TelemedicineRoom = () => {
           {/* Tools */}
           {!showChat && (
             <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+              
               {/* Notes */}
               <div style={{ marginBottom: 24 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -277,32 +248,34 @@ const TelemedicineRoom = () => {
                 )}
               </div>
 
-              {/* Prescription */}
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Prescription</span>
-                  <button onClick={() => setShowPrescription(!showPrescription)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#818cf8' }}>
-                    <DocumentPlusIcon style={{ width: 18, height: 18 }} />
-                  </button>
-                </div>
-                {showPrescription && (
-                  <div>
-                    {['medication', 'dosage', 'duration'].map(f => (
-                      <input key={f} type="text" value={prescription[f]} onChange={e => setPrescription({...prescription, [f]: e.target.value})}
-                        placeholder={f.charAt(0).toUpperCase() + f.slice(1)}
-                        style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.05)', color: 'white', fontSize: '0.85rem', marginBottom: 8, fontFamily: 'var(--font-sans)' }}
-                      />
-                    ))}
-                    <textarea value={prescription.instructions} onChange={e => setPrescription({...prescription, instructions: e.target.value})} placeholder="Instructions" rows={2}
-                      style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.05)', color: 'white', fontSize: '0.85rem', resize: 'vertical', marginBottom: 8, fontFamily: 'var(--font-sans)' }}
-                    />
-                    <button onClick={() => { setShowPrescription(false); setPrescription({ medication: '', dosage: '', duration: '', instructions: '' }); }} style={{
-                      padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                      background: 'var(--primary-600)', color: 'white', fontSize: '0.8rem', fontWeight: 600, fontFamily: 'var(--font-sans)'
-                    }}>Issue Prescription</button>
+              {/* Prescription (Only fully functional if Doctor, but visible to both) */}
+              {isDoctor && (
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Prescription</span>
+                    <button onClick={() => setShowPrescription(!showPrescription)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#818cf8' }}>
+                      <DocumentPlusIcon style={{ width: 18, height: 18 }} />
+                    </button>
                   </div>
-                )}
-              </div>
+                  {showPrescription && (
+                    <div>
+                      {['medication', 'dosage', 'duration'].map(f => (
+                        <input key={f} type="text" value={prescription[f]} onChange={e => setPrescription({...prescription, [f]: e.target.value})}
+                          placeholder={f.charAt(0).toUpperCase() + f.slice(1)}
+                          style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.05)', color: 'white', fontSize: '0.85rem', marginBottom: 8, fontFamily: 'var(--font-sans)' }}
+                        />
+                      ))}
+                      <textarea value={prescription.instructions} onChange={e => setPrescription({...prescription, instructions: e.target.value})} placeholder="Instructions" rows={2}
+                        style={{ width: '100%', padding: 10, borderRadius: 10, border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.05)', color: 'white', fontSize: '0.85rem', resize: 'vertical', marginBottom: 8, fontFamily: 'var(--font-sans)' }}
+                      />
+                      <button onClick={() => { setShowPrescription(false); setPrescription({ medication: '', dosage: '', duration: '', instructions: '' }); }} style={{
+                        padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                        background: 'var(--primary-600)', color: 'white', fontSize: '0.8rem', fontWeight: 600, fontFamily: 'var(--font-sans)'
+                      }}>Issue Prescription</button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Quick Actions */}
               <div>

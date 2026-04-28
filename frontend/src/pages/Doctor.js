@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom'; // Added this import
 import {
   CalendarIcon, UserGroupIcon, DocumentTextIcon,
   CheckCircleIcon, XCircleIcon, VideoCameraIcon,
@@ -57,6 +58,7 @@ const parseAppointmentDateTime = (appointment) => {
 };
 
 const Doctor = () => {
+  const navigate = useNavigate(); // Added navigate hook
   const [activeTab, setActiveTab] = useState('dashboard');
   const session = getSession();
 
@@ -237,12 +239,14 @@ const Doctor = () => {
       return second - first;
     });
 
+  // UPDATED ROUTING LOGIC FOR DOCTORS
   const handleJoinMeeting = (appointment) => {
     if (!appointment?.videoMeetingUrl) {
       return;
     }
-
-    window.open(appointment.videoMeetingUrl, '_blank', 'noopener,noreferrer');
+    navigate('/telemedicine-room', {
+      state: { appointment }
+    });
   };
 
   const renderDashboard = () => (
@@ -299,7 +303,7 @@ const Doctor = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className={`status ${apt.status?.toLowerCase() === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status}</span>
                   {apt.status?.toLowerCase() === 'confirmed' && (
-                    <button className="btn btn-success btn-sm">
+                    <button className="btn btn-success btn-sm" onClick={() => handleJoinMeeting(apt)}>
                       <VideoCameraIcon style={{ width: 14, height: 14 }} /> Join
                     </button>
                   )}
