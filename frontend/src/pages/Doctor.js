@@ -16,7 +16,8 @@ import {
   applyDoctorProfile,
   deleteMyAccount,
   fetchPatientProfile,
-  fetchPatientReports
+  fetchPatientReports,
+  issuePrescription
 } from '../services/api';
 import { clearSession, getSession } from '../services/session';
 
@@ -109,6 +110,9 @@ const Doctor = () => {
   const [reportsByPatient, setReportsByPatient] = useState({});
   const [reportsLoading, setReportsLoading] = useState(false);
   const [reportsError, setReportsError] = useState('');
+  const [prescriptionDrafts, setPrescriptionDrafts] = useState({});
+  const [prescriptionState, setPrescriptionState] = useState({ appointmentId: '', status: '' });
+  const [prescriptionFeedback, setPrescriptionFeedback] = useState({ type: '', message: '' });
 
   const sidebarLinks = [
     { id: 'dashboard', label: 'Dashboard', icon: Squares2X2Icon },
@@ -298,6 +302,56 @@ const Doctor = () => {
     }
   };
 
+  const getAppointmentPatientId = (appointment) => {
+    if (!appointment) return '';
+    if (appointment.patientId && typeof appointment.patientId === 'object') {
+      return appointment.patientId._id || appointment.patientId.id || '';
+    }
+    return appointment.patientUserId || appointment.patientId || '';
+  };
+
+  const handlePrescriptionDraftChange = (appointmentId, value) => {
+    setPrescriptionDrafts((current) => ({
+      ...current,
+      [appointmentId]: value
+    }));
+  };
+
+  const handleIssuePrescription = async (appointment) => {
+    const appointmentId = appointment?._id || '';
+    if (!appointmentId) return;
+
+    const patientId = String(getAppointmentPatientId(appointment) || '').trim();
+    const prescriptionText = String(prescriptionDrafts[appointmentId] || '').trim();
+
+    if (!patientId) {
+      setPrescriptionFeedback({ type: 'error', message: 'Unable to resolve patient id for this appointment.' });
+      return;
+    }
+
+    if (!prescriptionText) {
+      setPrescriptionFeedback({ type: 'error', message: 'Please enter prescription details before issuing.' });
+      return;
+    }
+
+    setPrescriptionState({ appointmentId, status: 'issuing' });
+    setPrescriptionFeedback({ type: '', message: '' });
+
+    try {
+      await issuePrescription({
+        patientId,
+        appointmentId,
+        prescriptionText
+      });
+      setPrescriptionFeedback({ type: 'success', message: 'Prescription issued successfully.' });
+      setPrescriptionDrafts((current) => ({ ...current, [appointmentId]: '' }));
+    } catch (error) {
+      setPrescriptionFeedback({ type: 'error', message: error.message || 'Failed to issue prescription.' });
+    } finally {
+      setPrescriptionState({ appointmentId: '', status: '' });
+    }
+  };
+
   const patientsWithAppointments = useMemo(() => {
     const seen = new Set();
     const grouped = [];
@@ -418,43 +472,67 @@ const Doctor = () => {
       </div>
 
       <div className="grid grid-cols-2 gap-6">
-        {/* Today's Schedule */}
         <div className="card">
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Today's Schedule</h3>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Upcoming Meetings</h3>
+          {prescriptionFeedback.message ? (
+            <div
+              style={{
+                marginBottom: 12,
+                padding: '10px 12px',
+                borderRadius: 10,
+                fontSize: '0.85rem',
+                background: prescriptionFeedback.type === 'success' ? '#f0fdf4' : '#fef2f2',
+                color: prescriptionFeedback.type === 'success' ? '#166534' : '#b91c1c',
+                border: `1px solid ${prescriptionFeedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`
+              }}
+            >
+              {prescriptionFeedback.message}
+            </div>
+          ) : null}
           {apptLoading ? (
-            <div className="loading-state">Loading appointments...</div>
-          ) : apptError ? (
-            <div className="error-state">{apptError}</div>
-          ) : todayAppts.length === 0 ? (
-            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No appointments scheduled for today.</div>
+            <div className="loading-state">Loading meetings...</div>
+          ) : upcomingMeetingAppts.length === 0 ? (
+            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No upcoming meetings.</div>
           ) : (
-            todayAppts.map((apt, idx) => (
-              <div key={apt._id || idx} className="item-row">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <UserGroupIcon style={{ width: 20, height: 20, color: 'var(--primary-600)' }} />
-                  </div>
+            upcomingMeetingAppts.map((apt, idx) => (
+              <div key={apt._id || idx} className="item-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>
                       {apt.patientId?.fullName || apt.patientName || 'Patient'}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
-                      {apt.reason || 'Consultation'} • {apt.timeSlot || 'TBD'}
+                      {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : 'TBD'} {apt.timeSlot && `at ${apt.timeSlot}`}
                     </div>
                   </div>
+                  <span className="status status-confirmed">{apt.status}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span className={`status ${apt.status?.toLowerCase() === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status}</span>
-                  {apt.status?.toLowerCase() === 'confirmed' && (
-                    <button
-                      type="button"
-                      className="btn btn-success btn-sm"
-                      onClick={() => handleJoinMeeting(apt)}
-                      disabled={!apt.videoMeetingUrl}
-                    >
-                      <VideoCameraIcon style={{ width: 14, height: 14 }} /> Join
-                    </button>
-                  )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={() => handleJoinMeeting(apt)}
+                    disabled={!apt.videoMeetingUrl}
+                    style={{ alignSelf: 'flex-end' }}
+                  >
+                    <VideoCameraIcon style={{ width: 14, height: 14 }} />
+                    {apt.videoMeetingUrl ? 'Join Live Meeting' : 'Meeting Link Not Ready'}
+                  </button>
+                  <textarea
+                    className="form-textarea"
+                    rows={3}
+                    placeholder="Write prescription for this patient..."
+                    value={prescriptionDrafts[apt._id] || ''}
+                    onChange={(event) => handlePrescriptionDraftChange(apt._id, event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => handleIssuePrescription(apt)}
+                    disabled={prescriptionState.appointmentId === apt._id}
+                    style={{ alignSelf: 'flex-end' }}
+                  >
+                    {prescriptionState.appointmentId === apt._id ? 'Issuing...' : 'Issue Prescription'}
+                  </button>
                 </div>
               </div>
             ))
@@ -546,39 +624,50 @@ const Doctor = () => {
           )}
         </div>
 
+        {/* Today's Schedule */}
         <div className="card">
-          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Upcoming Meetings</h3>
+          <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Today's Schedule</h3>
           {apptLoading ? (
-            <div className="loading-state">Loading meetings...</div>
-          ) : upcomingMeetingAppts.length === 0 ? (
-            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No upcoming meetings.</div>
+            <div className="loading-state">Loading appointments...</div>
+          ) : apptError ? (
+            <div className="error-state">{apptError}</div>
+          ) : todayAppts.length === 0 ? (
+            <div style={{ color: 'var(--gray-500)', fontSize: '0.9rem' }}>No appointments scheduled for today.</div>
           ) : (
-            upcomingMeetingAppts.map((apt, idx) => (
-              <div key={apt._id || idx} className="item-row" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            todayAppts.map((apt, idx) => (
+              <div key={apt._id || idx} className="item-row">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--primary-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <UserGroupIcon style={{ width: 20, height: 20, color: 'var(--primary-600)' }} />
+                  </div>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--gray-900)' }}>
                       {apt.patientId?.fullName || apt.patientName || 'Patient'}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--gray-500)' }}>
-                      {apt.appointmentDate ? new Date(apt.appointmentDate).toLocaleDateString() : 'TBD'} {apt.timeSlot && `at ${apt.timeSlot}`}
+                      {apt.reason || 'Consultation'} • {apt.timeSlot || 'TBD'}
                     </div>
                   </div>
-                  <span className="status status-confirmed">{apt.status}</span>
                 </div>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => handleJoinMeeting(apt)}
-                  disabled={!apt.videoMeetingUrl}
-                  style={{ alignSelf: 'flex-end' }}
-                >
-                  <VideoCameraIcon style={{ width: 14, height: 14 }} />
-                  {apt.videoMeetingUrl ? 'Join Live Meeting' : 'Meeting Link Not Ready'}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className={`status ${apt.status?.toLowerCase() === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status}</span>
+                  {apt.status?.toLowerCase() === 'confirmed' && (
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm"
+                      onClick={() => handleJoinMeeting(apt)}
+                      disabled={!apt.videoMeetingUrl}
+                    >
+                      <VideoCameraIcon style={{ width: 14, height: 14 }} /> Join
+                    </button>
+                  )}
+                </div>
               </div>
             ))
           )}
         </div>
+
+        
       </div>
     </div>
   );

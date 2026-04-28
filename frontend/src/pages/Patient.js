@@ -6,7 +6,7 @@ import {
   BellIcon, HeartIcon, VideoCameraIcon
 } from '@heroicons/react/24/outline';
 import Navbar from '../components/Navbar';
-import { fetchPatientAppointments, cancelAppointment, rescheduleAppointment } from '../services/api';
+import { fetchPatientAppointments, cancelAppointment, rescheduleAppointment, fetchMyPrescriptions } from '../services/api';
 import { getSession } from '../services/session';
 
 const Patient = () => {
@@ -15,6 +15,7 @@ const Patient = () => {
   const navigate = useNavigate();
 
   const [appointments, setAppointments] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [actionState, setActionState] = useState({ id: '', action: '' });
@@ -28,12 +29,18 @@ const Patient = () => {
     setIsLoading(true);
     setLoadError('');
     try {
-      const response = await fetchPatientAppointments();
-      const records = Array.isArray(response?.data) ? response.data : [];
-      setAppointments(records);
+      const [appointmentsResponse, prescriptionsResponse] = await Promise.all([
+        fetchPatientAppointments(),
+        fetchMyPrescriptions()
+      ]);
+      const appointmentRecords = Array.isArray(appointmentsResponse?.data) ? appointmentsResponse.data : [];
+      const prescriptionRecords = Array.isArray(prescriptionsResponse?.data) ? prescriptionsResponse.data : [];
+      setAppointments(appointmentRecords);
+      setPrescriptions(prescriptionRecords);
     } catch (error) {
       setLoadError(error.message || 'Failed to load appointments.');
       setAppointments([]);
+      setPrescriptions([]);
     } finally {
       setIsLoading(false);
     }
@@ -168,7 +175,7 @@ const Patient = () => {
         })}
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-rows-2 gap-6">
         {/* Appointments from API */}
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -208,6 +215,9 @@ const Patient = () => {
               const status = (apt.status || '').toLowerCase();
               const canModify = status === 'pending' || status === 'confirmed';
               const isRescheduling = rescheduleId === apt._id;
+              const appointmentPrescriptions = prescriptions.filter(
+                (item) => String(item?.appointmentId || '').trim() === String(apt?._id || '').trim()
+              );
               
               return (
                 <div key={apt._id || idx} style={{ borderBottom: '1px solid var(--gray-100)', paddingBottom: 12, marginBottom: 12 }}>
@@ -291,6 +301,32 @@ const Patient = () => {
                       </button>
                     </form>
                   )}
+
+                  {appointmentPrescriptions.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        background: '#f8fafc',
+                        border: '1px solid var(--gray-100)',
+                        borderRadius: 10,
+                        padding: 10
+                      }}
+                    >
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--gray-500)', marginBottom: 6 }}>
+                        PRESCRIPTION
+                      </div>
+                      {appointmentPrescriptions.map((item, pIndex) => (
+                        <div key={`${apt._id}-prescription-${pIndex}`} style={{ marginBottom: pIndex < appointmentPrescriptions.length - 1 ? 8 : 0 }}>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--gray-700)', whiteSpace: 'pre-wrap' }}>
+                            {item.prescriptionText || 'Prescription details unavailable.'}
+                          </div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--gray-500)', marginTop: 4 }}>
+                            Issued {item.dateIssued ? new Date(item.dateIssued).toLocaleString() : 'recently'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             });
@@ -298,7 +334,7 @@ const Patient = () => {
         </div>
 
         {/* Notifications placeholder */}
-        <div className="card">
+        {/* <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, margin: 0 }}>Notifications</h3>
             <BellIcon style={{ width: 18, height: 18, color: 'var(--gray-400)' }} />
@@ -326,10 +362,10 @@ const Patient = () => {
               </div>
             ))
           )}
-        </div>
+        </div> */}
 
         {/* Quick Actions */}
-        <div className="card">
+        {/* <div className="card">
           <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: 20 }}>Quick Actions</h3>
           <div className="grid grid-cols-2 gap-3">
             {[
@@ -353,7 +389,7 @@ const Patient = () => {
               );
             })}
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );
