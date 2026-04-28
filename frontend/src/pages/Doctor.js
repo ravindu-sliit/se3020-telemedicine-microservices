@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   CalendarIcon, UserGroupIcon, DocumentTextIcon,
   CheckCircleIcon, XCircleIcon, VideoCameraIcon,
@@ -58,7 +59,6 @@ const parseAppointmentDateTime = (appointment) => {
 };
 
 const Doctor = () => {
-  const navigate = useNavigate(); // Added navigate hook
   const [activeTab, setActiveTab] = useState('dashboard');
   const session = useMemo(() => getSession(), []);
   const navigate = useNavigate();
@@ -241,13 +241,31 @@ const Doctor = () => {
       return second - first;
     });
 
-  // UPDATED ROUTING LOGIC FOR DOCTORS
   const handleJoinMeeting = (appointment) => {
     if (!appointment?.videoMeetingUrl) {
       return;
     }
 
-    window.open(appointment.videoMeetingUrl, '_blank', 'noopener,noreferrer');
+    navigate(`/telemedicine-room?appointmentId=${encodeURIComponent(appointment._id)}`, {
+      state: { appointment }
+    });
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm('Delete your doctor account? This will remove your login access and cannot be undone.');
+    if (!confirmed) return;
+
+    setIsDeletingAccount(true);
+    setProfileFeedback({ type: '', message: '' });
+
+    try {
+      await deleteMyAccount();
+      clearSession();
+      window.location.href = '/';
+    } catch (error) {
+      setProfileFeedback({ type: 'error', message: error.message || 'Failed to delete your account.' });
+      setIsDeletingAccount(false);
+    }
   };
 
   const renderDashboard = () => (
@@ -304,7 +322,12 @@ const Doctor = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span className={`status ${apt.status?.toLowerCase() === 'confirmed' ? 'status-confirmed' : 'status-pending'}`}>{apt.status}</span>
                   {apt.status?.toLowerCase() === 'confirmed' && (
-                    <button className="btn btn-success btn-sm">
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm"
+                      onClick={() => handleJoinMeeting(apt)}
+                      disabled={!apt.videoMeetingUrl}
+                    >
                       <VideoCameraIcon style={{ width: 14, height: 14 }} /> Join
                     </button>
                   )}
