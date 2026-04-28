@@ -1,6 +1,5 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import Navbar from '../components/Navbar';
 import { loginUser, registerUser, registerDoctor } from '../services/api';
 import { saveSession, clearSession } from '../services/session';
 
@@ -103,7 +102,6 @@ const Auth = () => {
 
   return (
     <div className="page-wrapper">
-      <Navbar />
       <div style={{ padding: '48px 0 80px' }}>
         <div className="container" style={{ maxWidth: 1100 }}>
           <div className="grid grid-cols-2 gap-6">

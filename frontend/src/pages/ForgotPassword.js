@@ -19,7 +19,7 @@ const ForgotPassword = () => {
 
     try {
       const response = await requestPasswordReset(email);
-      setFeedback({ type: 'success', message: response.message });
+      setFeedback({ type: '', message: '' });
       setResetToken(response.data?.resetToken || '');
     } catch (error) {
       setFeedback({ type: 'error', message: error.message });
