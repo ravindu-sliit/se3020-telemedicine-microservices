@@ -75,6 +75,8 @@ web_modules/
 
 # local secret bootstrap files
 .secrets.local.env
+k8s/*-secret.yaml
+!k8s/*-secret.example.yaml
 k8s/*-secret.local.yaml
 
 # parcel-bundler cache (https://parceljs.org/)
