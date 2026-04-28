@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const { uploadsDir } = require('./middleware/uploadMiddleware');
 
 const healthRoutes = require('./routes/healthRoutes');
 const patientRoutes = require('./routes/patientRoutes');
@@ -13,6 +14,7 @@ app.use(
   })
 );
 app.use(express.json());
+app.use('/uploads', express.static(uploadsDir));
 
 app.use('/api/health', healthRoutes);
 app.use('/api/patients', patientRoutes);

@@ -474,7 +474,7 @@ export const deleteUserAccount = async (userId) => {
 };
 
 export const fetchPatientReports = async (patientId) => {
-  const response = await fetch(`${DOCTOR_BASE_URL}/doctors/patients/${patientId}/reports`, {
+  const response = await fetch(`${PATIENT_BASE_URL}/patients/reports/${patientId}`, {
     headers: buildHeaders()
   });
   return parseResponse(response);
