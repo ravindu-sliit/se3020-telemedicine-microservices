@@ -1,0 +1,71 @@
+Great, here is the full Kubernetes startup path for your project from a clean terminal in the repo root.
+
+1. Confirm prerequisites
+- Docker Desktop is running
+- Kubernetes is enabled in Docker Desktop
+- kubectl points to docker-desktop
+
+Commands:
+kubectl config current-context
+kubectl get nodes
+
+2. Add local host mapping
+- Add this line to your hosts file:
+127.0.0.1 smart-healthcare.local
+
+3. Set required environment variables in PowerShell
+- Use real values, then run this in the same terminal session:
+
+$env:AUTH_MONGODB_URI="your-auth-mongodb-uri"
+$env:PATIENT_MONGODB_URI="your-patient-mongodb-uri"
+$env:DOCTOR_MONGO_URI="your-doctor-mongodb-uri"
+$env:APPOINTMENT_MONGODB_URI="your-appointment-mongodb-uri"
+$env:JWT_SECRET="your-jwt-secret"
+$env:JWT_EXPIRES_IN="7d"
+$env:STRIPE_SECRET_KEY="your-stripe-secret-key"
+$env:EMAIL_USER="your-email"
+$env:EMAIL_APP_PASSWORD="your-email-app-password"
+$env:EMAIL_PROVIDER="auto"
+$env:EMAIL_FROM="your-email-or-sender"
+$env:SENDGRID_API_KEY=""
+$env:TWILIO_ACCOUNT_SID=""
+$env:TWILIO_AUTH_TOKEN=""
+$env:TWILIO_PHONE_NUMBER=""
+$env:GEMINI_API_KEY=""
+
+4. Create or update Kubernetes secrets
+Command:
+apply-k8s-secrets.ps1
+
+5. Build all service images
+Commands:
+docker build -t frontend-image:latest .\frontend
+docker build -t ai-symptom-checker-image:latest .\services\ai-symptom-checker
+docker build -t auth-service-image:latest .\services\auth-service
+docker build -t patient-service-image:latest .\services\patient-service
+docker build -t doctor-service-image:latest .\services\doctor-service
+docker build -t appointment-service-image:latest .\services\appointment-service
+docker build -t payment-service-image:latest .\services\payment-service
+docker build -t notification-service-image:latest .\services\notification-service
+
+6. Deploy manifests
+Command:
+Get-ChildItem .\k8s\*.yaml | Where-Object { $_.Name -notlike "*.example.yaml" } | ForEach-Object { kubectl apply -f $_.FullName }
+
+7. Restart all deployments once (good after fresh image builds)
+Command:
+kubectl get deployments -n default -o name | ForEach-Object { kubectl rollout restart $_ -n default }
+kubectl get deployments -n default -o name | ForEach-Object { kubectl rollout status $_ -n default --timeout=300s }
+
+8. Verify health
+Commands:
+kubectl get deployments -n default
+kubectl get pods -n default -o wide
+kubectl get svc -n default
+kubectl get ingress -n default
+
+9. Open app
+- URL:
+http://smart-healthcare.local
+
+If you want, I can now run a full post-start smoke check for you (auth, doctor list, appointment create, and notification flow) and report exactly what passes/fails.
