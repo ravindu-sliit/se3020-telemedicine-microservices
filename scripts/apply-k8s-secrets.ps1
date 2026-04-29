@@ -73,6 +73,11 @@ Apply-Secret "appointment-service-secrets" @{
   JWT_SECRET = $jwtSecret
 }
 
+Apply-Secret "telemedicine-service-secrets" @{
+  MONGODB_URI = Get-RequiredEnv "TELEMEDICINE_MONGODB_URI"
+  JWT_SECRET = $jwtSecret
+}
+
 Apply-Secret "payment-service-secrets" @{
   STRIPE_SECRET_KEY = Get-RequiredEnv "STRIPE_SECRET_KEY"
 }
