@@ -57,6 +57,13 @@ spec:
                 name: notification-service
                 port:
                   number: 5007
+          - path: /api/telemedicine
+            pathType: Prefix
+            backend:
+              service:
+                name: telemedicine-service
+                port:
+                  number: 5008
           - path: /
             pathType: Prefix
             backend:

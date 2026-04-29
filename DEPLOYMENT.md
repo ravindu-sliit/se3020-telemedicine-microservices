@@ -125,6 +125,7 @@ Gather the following information:
 | **Patient Service** | MongoDB Connection URI | `mongodb+srv://user:pass@cluster.mongodb.net/patient_db...` |
 | **Doctor Service** | MongoDB Connection URI | `mongodb+srv://user:pass@cluster.mongodb.net/doctor_db...` |
 | **Appointment Service** | MongoDB Connection URI | `mongodb+srv://user:pass@cluster.mongodb.net/appointment_db...` |
+| **Telemedicine Service** | MongoDB Connection URI | `mongodb+srv://user:pass@cluster.mongodb.net/telemedicine_db...` |
 | **JWT Authentication** | Shared JWT Secret | Any long random string (e.g., `your-secret-key-here`) |
 | **Payment Service** | Stripe Secret Key | `sk_test_51TMOFm...` |
 | **Email Service** | Email User | `your_email@gmail.com` |
@@ -140,6 +141,7 @@ $env:AUTH_MONGODB_URI="mongodb+srv://dbuser:password@cluster.mongodb.net/auth_db
 $env:PATIENT_MONGODB_URI="mongodb+srv://dbuser:password@cluster.mongodb.net/patient_db?retryWrites=true&w=majority&appName=Cluster0"
 $env:DOCTOR_MONGO_URI="mongodb+srv://dbuser:password@cluster.mongodb.net/doctor_db?retryWrites=true&w=majority&appName=Cluster0"
 $env:APPOINTMENT_MONGODB_URI="mongodb+srv://dbuser:password@cluster.mongodb.net/appointment_db?retryWrites=true&w=majority&appName=Cluster0"
+$env:TELEMEDICINE_MONGODB_URI="mongodb+srv://dbuser:password@cluster.mongodb.net/telemedicine_db?retryWrites=true&w=majority&appName=Cluster0"
 
 # Authentication
 $env:JWT_SECRET="your-long-random-secret-value-here"
@@ -173,6 +175,7 @@ Applied secret: auth-service-secrets
 Applied secret: patient-service-secrets
 Applied secret: doctor-service-secrets
 Applied secret: appointment-service-secrets
+Applied secret: telemedicine-service-secrets
 Applied secret: payment-service-secrets
 Applied secret: notification-service-secrets
 Applied secret: ai-service-secrets
@@ -201,6 +204,9 @@ docker build -t patient-service-image:latest ./services/patient-service
 # Doctor Service
 docker build -t doctor-service-image:latest ./services/doctor-service
 
+# Telemedicine Service
+docker build -t telemedicine-service-image:latest ./services/telemedicine-service
+
 # Payment Service
 docker build -t payment-service-image:latest ./services/payment-service
 
@@ -224,6 +230,7 @@ ai-symptom-checker-image           latest    <image-id>    <timestamp>
 auth-service-image                 latest    <image-id>    <timestamp>
 patient-service-image              latest    <image-id>    <timestamp>
 doctor-service-image               latest    <image-id>    <timestamp>
+telemedicine-service-image         latest    <image-id>    <timestamp>
 payment-service-image              latest    <image-id>    <timestamp>
 notification-service-image         latest    <image-id>    <timestamp>
 appointment-service-image          latest    <image-id>    <timestamp>
@@ -253,6 +260,8 @@ kubectl apply -f .\k8s\patient-deployment.yaml
 kubectl apply -f .\k8s\patient-service.yaml
 kubectl apply -f .\k8s\doctor-deployment.yaml
 kubectl apply -f .\k8s\doctor-service.yaml
+kubectl apply -f .\k8s\telemedicine-deployment.yaml
+kubectl apply -f .\k8s\telemedicine-service.yaml
 kubectl apply -f .\k8s\appointment-deployment.yaml
 kubectl apply -f .\k8s\appointment-service.yaml
 kubectl apply -f .\k8s\payment-deployment.yaml
@@ -275,6 +284,8 @@ deployment.apps/patient-service created
 service/patient-service created
 deployment.apps/doctor-service-deployment created
 service/doctor-service created
+deployment.apps/telemedicine-service-deployment created
+service/telemedicine-service created
 deployment.apps/appointment-service-deployment created
 service/appointment-service created
 deployment.apps/payment-service-deployment created

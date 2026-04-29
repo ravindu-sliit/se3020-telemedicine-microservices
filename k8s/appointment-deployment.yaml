@@ -41,3 +41,5 @@ spec:
               value: "http://patient-service:5002/api"
             - name: NOTIFICATION_API_URL
               value: "http://notification-service:5007/api/notifications/send"
+            - name: TELEMEDICINE_API_URL
+              value: "http://telemedicine-service:5008/api/telemedicine"
